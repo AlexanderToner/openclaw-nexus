@@ -98,17 +98,36 @@ export class PolicyLoader {
         continue;
       }
 
-      // Section header (e.g., "file_operations:")
+      // Section header or nested key (e.g., "file_operations:", "allowed_paths:")
       if (!trimmed.startsWith("-") && trimmed.endsWith(":")) {
-        const sectionName = trimmed.slice(0, -1);
+        const keyName = trimmed.slice(0, -1);
+
+        // Top-level sections
         if (
-          sectionName === "file_operations" ||
-          sectionName === "shell_commands" ||
-          sectionName === "network" ||
-          sectionName === "skills"
+          keyName === "file_operations" ||
+          keyName === "shell_commands" ||
+          keyName === "network" ||
+          keyName === "skills"
         ) {
-          currentSection = sectionName;
+          currentSection = keyName;
           currentArrayKey = null;
+          continue;
+        }
+
+        // Nested keys with array values (within a section)
+        if (currentSection) {
+          currentArrayKey = keyName;
+
+          // Initialize section if needed
+          if (!result[currentSection]) {
+            result[currentSection] = this.createEmptySection(currentSection) as never;
+          }
+
+          // Initialize empty array for this key
+          const section = result[currentSection] as unknown as Record<string, unknown>;
+          if (!section[keyName]) {
+            section[keyName] = [];
+          }
         }
         continue;
       }

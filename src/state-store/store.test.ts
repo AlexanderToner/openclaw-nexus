@@ -35,12 +35,12 @@ describe("GlobalStateStore", () => {
     });
 
     it("supports optimistic locking", async () => {
-      await store.set("key1", "value1", 0); // version 1
+      await store.set("key1", "value1"); // version 1
 
       const success1 = await store.set("key1", "value2", 1); // correct version
       expect(success1).toBe(true);
 
-      const success2 = await store.set("key1", "value3", 1); // stale version
+      const success2 = await store.set("key1", "value3", 1); // stale version (current is 2)
       expect(success2).toBe(false);
 
       const result = await store.get("key1");
@@ -135,9 +135,9 @@ describe("GlobalStateStore", () => {
     });
 
     it("tracks version conflicts", async () => {
-      await store.set("key1", "value1", 0);
-      await store.set("key1", "value2", 1); // success
-      await store.set("key1", "value3", 1); // conflict
+      await store.set("key1", "value1"); // version 1
+      await store.set("key1", "value2", 1); // success, version 2
+      await store.set("key1", "value3", 1); // conflict (current version is 2)
 
       const stats = store.getStats();
       expect(stats.versionConflicts).toBe(1);

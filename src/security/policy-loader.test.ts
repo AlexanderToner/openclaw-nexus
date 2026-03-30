@@ -20,25 +20,27 @@ describe("PolicyLoader", () => {
     const yamlContent = `
 file_operations:
   allowed_paths:
-    - "~/Desktop"
-    - "~/Documents"
+    - ~/Desktop
+    - ~/Documents
   blocked_paths:
-    - "/etc"
-    - "~/.ssh"
+    - /etc
+    - ~/.ssh
   allowed_extensions: []
   blocked_extensions: []
 
 shell_commands:
   allowed_commands:
-    - "ls"
-    - "cat"
+    - ls
+    - cat
   blocked_patterns:
-    - "rm -rf /"
+    - rm -rf /
 
 network:
   allowed_domains:
-    - "github.com"
-  blocked_ports: [22, 23]
+    - github.com
+  blocked_ports:
+    - 22
+    - 23
   allow_localhost: true
 
 skills:
