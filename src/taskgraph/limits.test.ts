@@ -1,7 +1,7 @@
 // src/taskgraph/limits.test.ts
-import { describe, it, expect, beforeEach, vi } from "vitest";
-import { TaskLimitsChecker, DEFAULT_TASK_LIMITS, LimitExceededError } from "./limits";
-import type { TaskGraph } from "./types";
+import { describe, it, expect } from "vitest";
+import { TaskLimitsChecker, DEFAULT_TASK_LIMITS, LimitExceededError } from "./limits.js";
+import type { TaskGraph } from "./types.js";
 
 describe("TaskLimitsChecker", () => {
   const createTestGraph = (overrides?: Partial<TaskGraph>): TaskGraph => ({

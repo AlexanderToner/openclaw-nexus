@@ -1,9 +1,8 @@
-// src/security/policy-loader.test.ts
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import * as fs from "fs/promises";
 import * as path from "path";
-import { PolicyLoader } from "./policy-loader";
-import type { SecurityPolicy } from "./types.policy";
+// src/security/policy-loader.test.ts
+import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { PolicyLoader } from "./policy-loader.js";
 
 describe("PolicyLoader", () => {
   const testDir = "/tmp/policy-loader-test";

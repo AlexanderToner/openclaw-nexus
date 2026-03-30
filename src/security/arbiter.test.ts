@@ -1,7 +1,7 @@
 // src/security/arbiter.test.ts
 import { describe, it, expect } from "vitest";
-import { SecurityArbiter } from "./arbiter";
-import type { SecurityPolicy } from "./types.policy";
+import { SecurityArbiter } from "./arbiter.js";
+import type { SecurityPolicy } from "./types.policy.js";
 
 describe("SecurityArbiter", () => {
   const createTestPolicy = (): SecurityPolicy => ({

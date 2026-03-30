@@ -1,7 +1,7 @@
 // src/viking/intent-classifier.test.ts
 import { describe, it, expect, vi } from "vitest";
-import { IntentClassifier } from "./intent-classifier";
-import type { RouteDecision } from "./types";
+import { IntentClassifier } from "./intent-classifier.js";
+import type { RouteDecision } from "./types.js";
 
 describe("IntentClassifier", () => {
   it("classifies file operation intent", async () => {

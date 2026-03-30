@@ -7,7 +7,13 @@
  */
 
 import * as fs from "fs/promises";
-import type { SecurityPolicy, FileOperationsPolicy, ShellCommandsPolicy, NetworkPolicy, SkillsPolicy } from "./types.policy";
+import type {
+  SecurityPolicy,
+  FileOperationsPolicy,
+  ShellCommandsPolicy,
+  NetworkPolicy,
+  SkillsPolicy,
+} from "./types.policy.js";
 
 /**
  * Default security policy with safe defaults.
@@ -15,29 +21,14 @@ import type { SecurityPolicy, FileOperationsPolicy, ShellCommandsPolicy, Network
  */
 export const DEFAULT_SECURITY_POLICY: SecurityPolicy = {
   file_operations: {
-    allowed_paths: [
-      "~/Desktop",
-      "~/Documents",
-      "~/Downloads",
-      "/tmp/openclaw-workspace",
-    ],
-    blocked_paths: [
-      "/etc",
-      "/System",
-      "~/.ssh",
-      "~/.gnupg",
-    ],
+    allowed_paths: ["~/Desktop", "~/Documents", "~/Downloads", "/tmp/openclaw-workspace"],
+    blocked_paths: ["/etc", "/System", "~/.ssh", "~/.gnupg"],
     allowed_extensions: [".txt", ".md", ".pdf", ".jpg", ".png", ".csv", ".json", ".log"],
     blocked_extensions: [".exe", ".sh", ".bat", ".vbs"],
   },
   shell_commands: {
     allowed_commands: ["ls", "cat", "mkdir", "cp", "mv", "rm"],
-    blocked_patterns: [
-      "rm -rf /",
-      "sudo",
-      "chmod 777",
-      "dd if=",
-    ],
+    blocked_patterns: ["rm -rf /", "sudo", "chmod 777", "dd if="],
   },
   network: {
     allowed_domains: [
@@ -71,7 +62,9 @@ export class PolicyLoader {
   async load(filePath: string): Promise<SecurityPolicy> {
     // Check cache first
     const cached = this.cache.get(filePath);
-    if (cached) return cached;
+    if (cached) {
+      return cached;
+    }
 
     try {
       const content = await fs.readFile(filePath, "utf-8");
@@ -93,56 +86,67 @@ export class PolicyLoader {
   private parseYaml(content: string): Partial<SecurityPolicy> {
     const result: Partial<SecurityPolicy> = {};
     const lines = content.split("\n");
-    let currentSection: string | null = null;
-    let currentArray: string[] | null = null;
+
+    let currentSection: keyof SecurityPolicy | null = null;
+    let currentArrayKey: string | null = null;
 
     for (const line of lines) {
       const trimmed = line.trim();
 
       // Skip empty lines and comments
-      if (!trimmed || trimmed.startsWith("#")) continue;
+      if (!trimmed || trimmed.startsWith("#")) {
+        continue;
+      }
 
       // Section header (e.g., "file_operations:")
       if (!trimmed.startsWith("-") && trimmed.endsWith(":")) {
-        currentSection = trimmed.slice(0, -1);
-        currentArray = null;
+        const sectionName = trimmed.slice(0, -1);
+        if (
+          sectionName === "file_operations" ||
+          sectionName === "shell_commands" ||
+          sectionName === "network" ||
+          sectionName === "skills"
+        ) {
+          currentSection = sectionName;
+          currentArrayKey = null;
+        }
         continue;
       }
 
       // Array item (e.g., "- \"~/Desktop\"")
-      if (trimmed.startsWith("- ")) {
+      if (trimmed.startsWith("- ") && currentSection) {
         const value = trimmed.slice(2).replace(/^["']|["']$/g, "");
 
-        if (currentSection) {
-          // Initialize section if needed
-          if (!result[currentSection as keyof SecurityPolicy]) {
-            result[currentSection as keyof SecurityPolicy] = this.createEmptySection(currentSection);
-          }
+        // Initialize section if needed
+        if (!result[currentSection]) {
+          result[currentSection] = this.createEmptySection(currentSection) as never;
+        }
 
-          const section = result[currentSection as keyof SecurityPolicy] as Record<string, unknown>;
-
-          // Find the array to add to (look for last key assignment)
-          if (currentArray && section[currentArray]) {
-            (section[currentArray] as string[]).push(value);
+        // Add to current array
+        if (currentArrayKey) {
+          const section = result[currentSection] as unknown as Record<string, unknown>;
+          if (section[currentArrayKey] && Array.isArray(section[currentArrayKey])) {
+            (section[currentArrayKey] as string[]).push(value);
           }
         }
         continue;
       }
 
       // Key-value pair (e.g., "max_per_task: 5")
-      if (trimmed.includes(": ")) {
-        const [key, value] = trimmed.split(": ");
+      if (trimmed.includes(": ") && currentSection) {
+        const colonIndex = trimmed.indexOf(": ");
+        const key = trimmed.slice(0, colonIndex);
+        const value = trimmed.slice(colonIndex + 2);
         const parsedValue = this.parseValue(value);
 
-        if (currentSection) {
-          if (!result[currentSection as keyof SecurityPolicy]) {
-            result[currentSection as keyof SecurityPolicy] = this.createEmptySection(currentSection);
-          }
-
-          const section = result[currentSection as keyof SecurityPolicy] as Record<string, unknown>;
-          section[key] = parsedValue;
-          currentArray = Array.isArray(parsedValue) ? key : null;
+        // Initialize section if needed
+        if (!result[currentSection]) {
+          result[currentSection] = this.createEmptySection(currentSection) as never;
         }
+
+        const section = result[currentSection] as unknown as Record<string, unknown>;
+        section[key] = parsedValue;
+        currentArrayKey = Array.isArray(parsedValue) ? key : null;
       }
     }
 
@@ -154,16 +158,24 @@ export class PolicyLoader {
    */
   private parseValue(value: string): string | number | boolean | string[] | number[] {
     // Boolean
-    if (value === "true") return true;
-    if (value === "false") return false;
+    if (value === "true") {
+      return true;
+    }
+    if (value === "false") {
+      return false;
+    }
 
     // Number
-    if (/^-?\d+$/.test(value)) return parseInt(value, 10);
+    if (/^-?\d+$/.test(value)) {
+      return parseInt(value, 10);
+    }
 
     // Array (e.g., "[22, 23]")
     if (value.startsWith("[") && value.endsWith("]")) {
       const inner = value.slice(1, -1).trim();
-      if (!inner) return [];
+      if (!inner) {
+        return [];
+      }
 
       const items = inner.split(",").map((s) => s.trim());
       if (items.every((s) => /^-?\d+$/.test(s))) {
@@ -179,18 +191,27 @@ export class PolicyLoader {
   /**
    * Create an empty section based on section name.
    */
-  private createEmptySection(section: string): FileOperationsPolicy | ShellCommandsPolicy | NetworkPolicy | SkillsPolicy {
+  private createEmptySection(
+    section: keyof SecurityPolicy,
+  ): FileOperationsPolicy | ShellCommandsPolicy | NetworkPolicy | SkillsPolicy {
     switch (section) {
       case "file_operations":
-        return { allowed_paths: [], blocked_paths: [], allowed_extensions: [], blocked_extensions: [] };
+        return {
+          allowed_paths: [],
+          blocked_paths: [],
+          allowed_extensions: [],
+          blocked_extensions: [],
+        };
       case "shell_commands":
         return { allowed_commands: [], blocked_patterns: [] };
       case "network":
         return { allowed_domains: [], blocked_ports: [], allow_localhost: true };
       case "skills":
-        return { max_per_task: 5, dangerous_skills: [], dangerous_skills_require_approval: false };
-      default:
-        return {} as never;
+        return {
+          max_per_task: 5,
+          dangerous_skills: [],
+          dangerous_skills_require_approval: false,
+        };
     }
   }
 

@@ -1,9 +1,4 @@
 // src/viking/types.ts
-/**
- * Viking Router Types
- *
- * Lightweight routing layer for intent classification and context filtering.
- */
 
 export type IntentType = "file_ops" | "gui_auto" | "browser" | "chat" | "code";
 export type ContextSizeHint = "minimal" | "normal" | "full";

@@ -6,7 +6,7 @@
  * and ensure all tasks eventually terminate.
  */
 
-import type { TaskGraph, TaskLimits } from "./types";
+import type { TaskGraph, TaskLimits } from "./types.js";
 
 /**
  * Default task limits.
@@ -29,7 +29,7 @@ export class LimitExceededError extends Error {
   constructor(
     public readonly limitType: "steps" | "tokens" | "replans" | "timeout",
     public readonly current: number,
-    public readonly max: number
+    public readonly max: number,
   ) {
     super(`Task exceeded ${limitType} limit: ${current}/${max}`);
     this.name = "LimitExceededError";

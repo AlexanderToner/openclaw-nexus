@@ -7,9 +7,9 @@
  * to minimize token consumption.
  */
 
-import type { RouteDecision, ContextFilterResult, IntentType } from "./types";
-import type { IntentClassifier } from "./intent-classifier";
-import type { ContextFilter } from "./context-filter";
+import type { ContextFilter } from "./context-filter.js";
+import type { IntentClassifier } from "./intent-classifier.js";
+import type { RouteDecision, ContextFilterResult, IntentType } from "./types.js";
 
 export interface RouterResult {
   /** The routing decision from intent classification */
@@ -48,7 +48,7 @@ export class VikingRouter {
   constructor(
     classifier: IntentClassifier,
     filter: ContextFilter,
-    options?: Partial<RouterOptions>
+    options?: Partial<RouterOptions>,
   ) {
     this.classifier = classifier;
     this.filter = filter;
@@ -68,7 +68,7 @@ export class VikingRouter {
       tools: string[];
       files: string[];
       skills: string[];
-    }
+    },
   ): Promise<RouterResult> {
     let decision: RouteDecision;
     let success = true;
@@ -76,7 +76,7 @@ export class VikingRouter {
     // Step 1: Classify intent
     try {
       decision = await this.classifier.classify(userMessage);
-    } catch (error) {
+    } catch {
       // Fallback on classification failure
       decision = this.createFallbackDecision();
       success = false;

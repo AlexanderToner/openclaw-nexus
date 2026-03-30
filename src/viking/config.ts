@@ -5,7 +5,7 @@
  * Default configuration and resolution for the Viking routing layer.
  */
 
-import type { VikingConfig, IntentType } from "./types";
+import type { VikingConfig, IntentType } from "./types.js";
 
 /**
  * Default Viking configuration using local Ollama with Qwen model.

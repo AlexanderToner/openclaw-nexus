@@ -1,7 +1,7 @@
 // src/viking/context-filter.test.ts
 import { describe, it, expect } from "vitest";
-import { ContextFilter } from "./context-filter";
-import type { RouteDecision } from "./types";
+import { ContextFilter } from "./context-filter.js";
+import type { RouteDecision } from "./types.js";
 
 describe("ContextFilter", () => {
   it("filters tools based on RouteDecision", () => {
@@ -26,7 +26,12 @@ describe("ContextFilter", () => {
     const result = filter.filterTools(allTools, decision);
 
     expect(result.filtered).toEqual(["fs_read", "fs_write"]);
-    expect(result.filteredOut).toEqual(["shell_exec", "browser_navigate", "gui_click", "slack_send"]);
+    expect(result.filteredOut).toEqual([
+      "shell_exec",
+      "browser_navigate",
+      "gui_click",
+      "slack_send",
+    ]);
   });
 
   it("returns all tools when contextSizeHint is full", () => {
@@ -48,12 +53,7 @@ describe("ContextFilter", () => {
 
   it("filters files based on requiredFiles", () => {
     const filter = new ContextFilter();
-    const allFiles = [
-      "AGENTS.md",
-      "src/index.ts",
-      "docs/README.md",
-      "package.json",
-    ];
+    const allFiles = ["AGENTS.md", "src/index.ts", "docs/README.md", "package.json"];
     const decision: RouteDecision = {
       intent: "file_ops",
       requiredTools: [],

@@ -11,7 +11,7 @@
  * - New approach: Operation checked BEFORE execution, blocked if unsafe
  */
 
-import type { SecurityPolicy, SecurityCheckResult, SecurityAuditEntry } from "./types.policy";
+import type { SecurityPolicy, SecurityCheckResult, SecurityAuditEntry } from "./types.policy.js";
 
 /**
  * SecurityArbiter enforces security policy through pre-execution checks.
@@ -116,7 +116,7 @@ export class SecurityArbiter {
 
     // Check allowed commands
     const isAllowed = this.policy.shell_commands.allowed_commands.some(
-      (allowed) => baseCommand === allowed || trimmed.startsWith(allowed + " ")
+      (allowed) => baseCommand === allowed || trimmed.startsWith(allowed + " "),
     );
 
     if (!isAllowed) {
@@ -155,7 +155,7 @@ export class SecurityArbiter {
 
     // Check allowed domains
     const isAllowed = this.policy.network.allowed_domains.some(
-      (allowed) => domain === allowed || domain.endsWith("." + allowed)
+      (allowed) => domain === allowed || domain.endsWith("." + allowed),
     );
 
     if (!isAllowed) {
@@ -242,7 +242,7 @@ export class SecurityArbiter {
     operationType: SecurityAuditEntry["operation_type"],
     value: string,
     allowed: boolean,
-    rule: string
+    rule: string,
   ): void {
     this.auditLog.push({
       timestamp: Date.now(),

@@ -6,7 +6,7 @@
  * what tools, files, and skills are needed for a request.
  */
 
-import type { RouteDecision, VikingConfig } from "./types";
+import type { RouteDecision } from "./types.js";
 
 export type LlmCaller = (prompt: string) => Promise<RouteDecision>;
 

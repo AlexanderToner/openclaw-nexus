@@ -6,7 +6,7 @@
  * to minimize token consumption by loading only what's needed.
  */
 
-import type { RouteDecision, ContextFilterResult } from "./types";
+import type { RouteDecision, ContextFilterResult } from "./types.js";
 
 export interface FilterResult {
   /** Items that passed the filter */
@@ -59,9 +59,8 @@ export class ContextFilter {
       }
     }
 
-    const savingsPercent = allTools.length > 0
-      ? Math.round((filteredOut.length / allTools.length) * 100)
-      : 0;
+    const savingsPercent =
+      allTools.length > 0 ? Math.round((filteredOut.length / allTools.length) * 100) : 0;
 
     return { filtered, filteredOut, savingsPercent };
   }
@@ -84,9 +83,7 @@ export class ContextFilter {
     }
 
     // Extract base file names from requiredFiles (may include #section suffixes)
-    const requiredBaseNames = new Set(
-      decision.requiredFiles.map((f) => f.split("#")[0])
-    );
+    const requiredBaseNames = new Set(decision.requiredFiles.map((f) => f.split("#")[0]));
 
     const filtered: string[] = [];
     const filteredOut: string[] = [];
@@ -99,9 +96,8 @@ export class ContextFilter {
       }
     }
 
-    const savingsPercent = allFiles.length > 0
-      ? Math.round((filteredOut.length / allFiles.length) * 100)
-      : 0;
+    const savingsPercent =
+      allFiles.length > 0 ? Math.round((filteredOut.length / allFiles.length) * 100) : 0;
 
     return { filtered, filteredOut, savingsPercent };
   }
@@ -135,9 +131,8 @@ export class ContextFilter {
       }
     }
 
-    const savingsPercent = allSkills.length > 0
-      ? Math.round((filteredOut.length / allSkills.length) * 100)
-      : 0;
+    const savingsPercent =
+      allSkills.length > 0 ? Math.round((filteredOut.length / allSkills.length) * 100) : 0;
 
     return { filtered, filteredOut, savingsPercent };
   }
@@ -155,7 +150,7 @@ export class ContextFilter {
       files: string[];
       skills: string[];
     },
-    decision: RouteDecision
+    decision: RouteDecision,
   ): ContextFilterResult {
     const toolsResult = this.filterTools(context.tools, decision);
     const filesResult = this.filterFiles(context.files, decision);
@@ -168,9 +163,7 @@ export class ContextFilter {
       filesResult.filteredOut.length +
       skillsResult.filteredOut.length;
 
-    const tokenSavingsPercent = totalItems > 0
-      ? Math.round((savedItems / totalItems) * 100)
-      : 0;
+    const tokenSavingsPercent = totalItems > 0 ? Math.round((savedItems / totalItems) * 100) : 0;
 
     return {
       tools: toolsResult.filtered,
