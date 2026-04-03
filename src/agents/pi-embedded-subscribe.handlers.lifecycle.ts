@@ -85,7 +85,7 @@ export function handleAgentEnd(ctx: EmbeddedPiSubscribeContext) {
       },
     });
   } else {
-    ctx.log.debug(`embedded run agent end: runId=${ctx.params.runId} isError=${isError}`);
+    ctx.log.debug(`embedded run agent end: runId=${ctx.params.runId} isError=false`);
     emitAgentEvent({
       runId: ctx.params.runId,
       stream: "lifecycle",

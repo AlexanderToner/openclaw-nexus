@@ -194,6 +194,47 @@ export const AgentDefaultsSchema = z
       .strict()
       .optional(),
     sandbox: AgentSandboxSchema,
+    viking: z
+      .object({
+        /** Enable Viking Router for intent classification */
+        enabled: z.boolean().optional().default(false),
+        model: z
+          .object({
+            provider: z.enum(["ollama", "openai", "anthropic"]).optional(),
+            modelId: z.string().optional(),
+            endpoint: z.string().optional(),
+            maxTokens: z.number().int().min(64).max(4096).optional().default(512),
+            timeoutMs: z.number().int().min(500).max(60000).optional().default(15_000),
+          })
+          .strict()
+          .optional(),
+        fallbackIntent: z
+          .enum(["file_ops", "gui_auto", "browser", "chat", "code"])
+          .optional()
+          .default("chat"),
+        confidenceThreshold: z.number().min(0).max(1).optional().default(0.7),
+      })
+      .strict()
+      .optional(),
+    taskgraph: z
+      .object({
+        /** Enable TaskGraph structured execution */
+        enabled: z.boolean().optional().default(false),
+        triggerIntents: z
+          .array(z.enum(["file_ops", "gui_auto", "browser", "chat", "code"]))
+          .optional()
+          .default(["gui_auto", "browser"]),
+        limits: z
+          .object({
+            maxSteps: z.number().int().min(1).max(100).optional().default(50),
+            maxTokens: z.number().int().min(1000).max(100000).optional().default(50000),
+            maxReplans: z.number().int().min(0).max(10).optional().default(3),
+          })
+          .strict()
+          .optional(),
+      })
+      .strict()
+      .optional(),
   })
   .strict()
   .optional();

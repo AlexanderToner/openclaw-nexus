@@ -9,6 +9,12 @@ import { computeBackoff, sleepWithAbort } from "../../infra/backoff.js";
 import { getGlobalHookRunner } from "../../plugins/hook-runner-global.js";
 import { enqueueCommandInLane } from "../../process/command-queue.js";
 import { isMarkdownCapableMessageChannel } from "../../utils/message-channel.js";
+import {
+  VikingRouter,
+  IntentClassifier,
+  ContextFilter,
+  type RouteDecision,
+} from "../../viking/index.js";
 import { resolveOpenClawAgentDir } from "../agent-paths.js";
 import { hasConfiguredModelFallbacks } from "../agent-scope.js";
 import {
@@ -89,6 +95,7 @@ import {
 import type { EmbeddedPiAgentMeta, EmbeddedPiRunResult } from "./types.js";
 import { createUsageAccumulator, mergeUsageIntoAccumulator } from "./usage-accumulator.js";
 import { describeUnknownError } from "./utils.js";
+import { createVikingLlmCaller } from "./viking-llm-caller.js";
 
 type ApiKeyInfo = ResolvedProviderAuth;
 
@@ -415,6 +422,28 @@ export async function runEmbeddedPiAgent(
         let authRetryPending = false;
         // Hoisted so the retry-limit error path can use the most recent API total.
         let lastTurnTotal: number | undefined;
+
+        // Initialize Viking Router if enabled
+        const vikingConfig = params.config?.agents?.defaults?.viking;
+        let vikingRouter: VikingRouter | undefined;
+        let currentRouteDecision: RouteDecision | undefined;
+
+        if (vikingConfig?.enabled) {
+          try {
+            const llmCaller = createVikingLlmCaller(vikingConfig);
+            const classifier = new IntentClassifier(llmCaller);
+            const filter = new ContextFilter();
+            vikingRouter = new VikingRouter(classifier, filter, {
+              fallbackIntent: vikingConfig.fallbackIntent ?? "chat",
+            });
+            log.info(
+              `[viking] initialized router with model=${vikingConfig.model?.modelId ?? "qwen3.5:9b"}`,
+            );
+          } catch (err) {
+            log.warn(`[viking] failed to initialize router: ${describeUnknownError(err)}`);
+          }
+        }
+
         while (true) {
           if (runLoopIterations >= MAX_RUN_LOOP_ITERATIONS) {
             const message =
@@ -463,6 +492,35 @@ export async function runEmbeddedPiAgent(
 
           const prompt =
             provider === "anthropic" ? scrubAnthropicRefusalMagic(params.prompt) : params.prompt;
+
+          // Perform Viking intent classification if router is available
+          if (vikingRouter) {
+            const vikingStart = Date.now();
+            try {
+              const routeResult = await vikingRouter.route(params.prompt);
+              const vikingDuration = Date.now() - vikingStart;
+              currentRouteDecision = routeResult.decision;
+
+              // Log detailed routing information
+              const tools = routeResult.decision.requiredTools.join(",") || "none";
+              const files = routeResult.decision.requiredFiles.join(",") || "none";
+
+              if (!routeResult.success) {
+                log.info(
+                  `[viking] FALLBACK: intent=${routeResult.decision.intent} conf=${routeResult.decision.confidence.toFixed(2)} tools=[${tools}] files=[${files}] duration=${vikingDuration}ms (classification failed)`,
+                );
+              } else {
+                log.info(
+                  `[viking] OK: intent=${routeResult.decision.intent} conf=${routeResult.decision.confidence.toFixed(2)} tools=[${tools}] files=[${files}] hint=${routeResult.decision.contextSizeHint} duration=${vikingDuration}ms`,
+                );
+              }
+            } catch (err) {
+              const vikingDuration = Date.now() - vikingStart;
+              log.warn(
+                `[viking] FAILED: error=${describeUnknownError(err)} duration=${vikingDuration}ms`,
+              );
+            }
+          }
 
           const attempt = await runEmbeddedAttempt({
             sessionId: params.sessionId,
@@ -539,6 +597,7 @@ export async function runEmbeddedPiAgent(
             bootstrapPromptWarningSignaturesSeen,
             bootstrapPromptWarningSignature:
               bootstrapPromptWarningSignaturesSeen[bootstrapPromptWarningSignaturesSeen.length - 1],
+            vikingRouteDecision: currentRouteDecision,
           });
 
           const {

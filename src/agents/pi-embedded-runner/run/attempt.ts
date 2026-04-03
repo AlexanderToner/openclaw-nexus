@@ -33,6 +33,7 @@ import { buildTtsSystemPromptHint } from "../../../tts/tts.js";
 import { resolveUserPath } from "../../../utils.js";
 import { normalizeMessageChannel } from "../../../utils/message-channel.js";
 import { isReasoningTagProvider } from "../../../utils/provider-utils.js";
+import type { RouteDecision } from "../../../viking/types.js";
 import { resolveOpenClawAgentDir } from "../../agent-paths.js";
 import { resolveSessionAgentIds } from "../../agent-scope.js";
 import { createAnthropicPayloadLogger } from "../../anthropic-payload-log.js";
@@ -76,6 +77,7 @@ import { createPreparedEmbeddedPiSettingsManager } from "../../pi-project-settin
 import { applyPiAutoCompactionGuard } from "../../pi-settings.js";
 import { toClientToolDefinitions } from "../../pi-tool-definition-adapter.js";
 import { createOpenClawCodingTools, resolveToolLoopDetectionConfig } from "../../pi-tools.js";
+import type { AnyAgentTool } from "../../pi-tools.types.js";
 import { registerProviderStreamForModel } from "../../provider-stream.js";
 import { resolveSandboxContext } from "../../sandbox.js";
 import { resolveSandboxRuntimeStatus } from "../../sandbox/runtime-status.js";
@@ -153,6 +155,7 @@ import {
   stripSessionsYieldArtifacts,
   waitForSessionsYieldAbortSettle,
 } from "./attempt.sessions-yield.js";
+import { wrapStreamFnHandleSensitiveStopReason } from "./attempt.stop-reason-recovery.js";
 import {
   appendAttemptCacheTtlIfNeeded,
   composeSystemPromptWithHookContext,
@@ -164,7 +167,6 @@ import {
   wrapStreamFnDecodeXaiToolCallArguments,
   wrapStreamFnRepairMalformedToolCallArguments,
 } from "./attempt.tool-call-argument-repair.js";
-import { wrapStreamFnHandleSensitiveStopReason } from "./attempt.stop-reason-recovery.js";
 import {
   wrapStreamFnSanitizeMalformedToolCalls,
   wrapStreamFnTrimToolCallNames,
@@ -179,6 +181,47 @@ import {
 import { pruneProcessedHistoryImages } from "./history-image-prune.js";
 import { detectAndLoadPromptImages } from "./images.js";
 import type { EmbeddedRunAttemptParams, EmbeddedRunAttemptResult } from "./types.js";
+
+// Core tool names that should always be available
+const CORE_TOOL_NAMES = new Set([
+  "read",
+  "write",
+  "edit",
+  "notepad",
+  "glob",
+  "grep",
+  "bash",
+  "shell",
+  "lspath",
+]);
+
+/**
+ * Filter tools based on Viking Router decision.
+ * If no decision is provided, returns all tools.
+ * If filtering, keeps core tools and tools matching requiredTools.
+ */
+function filterToolsByVikingDecision(
+  tools: AnyAgentTool[],
+  routeDecision?: RouteDecision,
+): AnyAgentTool[] {
+  if (!routeDecision || routeDecision.requiredTools.length === 0) {
+    return tools;
+  }
+
+  const requiredTools = new Set(routeDecision.requiredTools);
+
+  return tools.filter((tool) => {
+    // Always keep core tools
+    if (CORE_TOOL_NAMES.has(tool.name)) {
+      return true;
+    }
+    // Keep tools that are in the required tools list
+    if (requiredTools.has(tool.name)) {
+      return true;
+    }
+    return false;
+  });
+}
 
 export {
   appendAttemptCacheTtlIfNeeded,
@@ -476,8 +519,23 @@ export async function runEmbeddedAttempt(
           },
         });
     const toolsEnabled = supportsModelTools(params.model);
+    // Apply Viking route decision filtering if available
+    const rawTools = toolsEnabled ? toolsRaw : [];
+    const filteredTools = filterToolsByVikingDecision(rawTools, params.vikingRouteDecision);
+
+    // Log Viking tool filtering if decision was made
+    if (params.vikingRouteDecision) {
+      const filteredNames = filteredTools.map((t) => t.name);
+      const requiredTools = params.vikingRouteDecision.requiredTools;
+      const keptTools = requiredTools.filter((t) => filteredNames.includes(t));
+      const coreTools = filteredNames.filter((n) => !requiredTools.includes(n));
+      log.info(
+        `[viking-tools] filtered: raw=${rawTools.length} filtered=${filteredTools.length} required=[${keptTools.join(",") || "none"}] core=[${coreTools.join(",") || "none"}]`,
+      );
+    }
+
     const tools = sanitizeToolsForGoogle({
-      tools: toolsEnabled ? toolsRaw : [],
+      tools: filteredTools,
       provider: params.provider,
     });
     const clientTools = toolsEnabled ? params.clientTools : undefined;

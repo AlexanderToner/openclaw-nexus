@@ -293,6 +293,10 @@ export type AgentDefaultsConfig = {
   };
   /** Optional sandbox settings for non-main sessions. */
   sandbox?: AgentSandboxConfig;
+  /** Viking Router configuration for intent classification and context filtering. */
+  viking?: VikingConfig;
+  /** TaskGraph configuration for structured task execution. */
+  taskgraph?: TaskGraphConfig;
 };
 
 export type AgentCompactionMode = "default" | "safeguard";
@@ -364,4 +368,42 @@ export type AgentCompactionMemoryFlushConfig = {
   prompt?: string;
   /** System prompt appended for the memory flush turn. */
   systemPrompt?: string;
+};
+
+export type VikingConfig = {
+  /** Enable Viking Router for intent classification. */
+  enabled?: boolean;
+  /** Model configuration for Viking Router. */
+  model?: {
+    /** Provider for Viking Router model. */
+    provider?: "ollama" | "openai" | "anthropic";
+    /** Model ID (e.g., "qwen3.5:9b"). */
+    modelId?: string;
+    /** Custom endpoint URL. */
+    endpoint?: string;
+    /** Max tokens for intent classification (default: 512). */
+    maxTokens?: number;
+    /** Timeout for Viking Router calls (default: 3000ms). */
+    timeoutMs?: number;
+  };
+  /** Fallback intent when classification fails (default: "chat"). */
+  fallbackIntent?: "file_ops" | "gui_auto" | "browser" | "chat" | "code";
+  /** Confidence threshold for intent classification (default: 0.7). */
+  confidenceThreshold?: number;
+};
+
+export type TaskGraphConfig = {
+  /** Enable TaskGraph structured execution. */
+  enabled?: boolean;
+  /** Intents that trigger TaskGraph execution (default: ["gui_auto", "browser"]). */
+  triggerIntents?: Array<"file_ops" | "gui_auto" | "browser" | "chat" | "code">;
+  /** Execution limits. */
+  limits?: {
+    /** Maximum steps in a TaskGraph (default: 50). */
+    maxSteps?: number;
+    /** Maximum tokens for TaskGraph execution (default: 50000). */
+    maxTokens?: number;
+    /** Maximum replanning attempts (default: 3). */
+    maxReplans?: number;
+  };
 };
