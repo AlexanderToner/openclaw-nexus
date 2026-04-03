@@ -110,6 +110,7 @@ async function callOllama(prompt: string, config: VikingLlmCallerConfig): Promis
       options: {
         num_predict: maxTokens,
         temperature: 0.1, // Low temperature for consistent classification
+        think: false, // Disable thinking mode for qwen3.5
       },
     }),
   });
@@ -119,7 +120,12 @@ async function callOllama(prompt: string, config: VikingLlmCallerConfig): Promis
   }
 
   const data = await response.json();
-  return data.response as string;
+  // Fall back to thinking field if response is empty (thinking mode was not disabled)
+  const text = (data.response as string) || (data.thinking as string) || "";
+  if (!data.response && data.thinking) {
+    log.debug(`[viking-llm] response was in thinking field, len=${data.thinking.length}`);
+  }
+  return text;
 }
 
 /**

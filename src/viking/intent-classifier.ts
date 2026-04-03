@@ -17,7 +17,7 @@ interface ClassifierConfig {
 
 const DEFAULT_CLASSIFIER_CONFIG: ClassifierConfig = {
   maxTokens: 512,
-  timeoutMs: 3000,
+  timeoutMs: 15_000, // 15s for local model cold starts (qwen3.5:9b)
 };
 
 /**
