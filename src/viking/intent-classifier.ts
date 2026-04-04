@@ -53,9 +53,22 @@ export class IntentClassifier {
    */
   private buildPrompt(message: string): string {
     return `<|im_start|>system
-You are an intent classifier. Output ONLY valid JSON, no other text.
+You are an intent classifier. You MUST output ONLY valid JSON. No explanation, no thinking, no other text.
+
+Examples:
+User: 你好
+Assistant: {"intent":"chat","requiredTools":[],"requiredFiles":[],"requiredSkills":[],"contextSizeHint":"minimal","confidence":0.95}
+User: 列出文件
+Assistant: {"intent":"file_ops","requiredTools":["read"],"requiredFiles":[],"requiredSkills":[],"contextSizeHint":"minimal","confidence":0.9}
+User: 帮我写代码
+Assistant: {"intent":"code","requiredTools":["write"],"requiredFiles":[],"requiredSkills":[],"contextSizeHint":"normal","confidence":0.85}
+User: 浏览网页
+Assistant: {"intent":"browser","requiredTools":["browser"],"requiredFiles":[],"requiredSkills":[],"contextSizeHint":"normal","confidence":0.9}
+User: 自动点击
+Assistant: {"intent":"gui_auto","requiredTools":[],"requiredFiles":[],"requiredSkills":[],"contextSizeHint":"normal","confidence":0.8}
+
 JSON schema:
-{"intent":"file_ops|gui_auto|browser|chat|code","requiredTools":["tool1"],"requiredFiles":["file1"],"requiredSkills":["skill1"],"contextSizeHint":"minimal|normal|full","confidence":0.95}
+{"intent":"file_ops|gui_auto|browser|chat|code","requiredTools":[],"requiredFiles":[],"requiredSkills":[],"contextSizeHint":"minimal|normal|full","confidence":0.0-1.0}
 
 Intent: file_ops=文件操作, gui_auto=桌面GUI自动化, browser=浏览器自动化, chat=对话, code=代码
 <|im_end|>
@@ -63,6 +76,6 @@ Intent: file_ops=文件操作, gui_auto=桌面GUI自动化, browser=浏览器自
 Classify: ${message}
 <|im_end|>
 <|im_start|>assistant
-{"intent":"`;
+`;
   }
 }

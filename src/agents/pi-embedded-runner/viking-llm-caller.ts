@@ -107,10 +107,10 @@ async function callOllama(prompt: string, config: VikingLlmCallerConfig): Promis
       model,
       prompt,
       stream: false,
+      format: "json", // Force JSON output
       options: {
         num_predict: maxTokens,
         temperature: 0.1, // Low temperature for consistent classification
-        think: false, // Disable thinking mode for qwen3.5
       },
     }),
   });
@@ -120,10 +120,19 @@ async function callOllama(prompt: string, config: VikingLlmCallerConfig): Promis
   }
 
   const data = await response.json();
-  // Fall back to thinking field if response is empty (thinking mode was not disabled)
-  const text = (data.response as string) || (data.thinking as string) || "";
-  if (!data.response && data.thinking) {
-    log.debug(`[viking-llm] response was in thinking field, len=${data.thinking.length}`);
+  // qwen3.5 outputs JSON in thinking field even with format:json
+  let text = (data.response as string) || "";
+  const thinking = data.thinking as string | undefined;
+
+  if (!text && thinking) {
+    // Try to extract JSON from thinking field
+    const jsonMatch = thinking.match(/\{[\s\S]*\}/);
+    if (jsonMatch) {
+      text = jsonMatch[0];
+      log.debug(`[viking-llm] extracted JSON from thinking field, len=${text.length}`);
+    } else {
+      text = thinking;
+    }
   }
   return text;
 }
