@@ -27,10 +27,10 @@ export type VikingLlmCallerConfig = {
 
 const DEFAULT_CONFIG: Required<Omit<VikingLlmCallerConfig, "endpoint">> & { endpoint: string } = {
   provider: "ollama",
-  modelId: "qwen3.5:9b",
+  modelId: "qwen3.5:2b",
   endpoint: "http://localhost:11434",
-  maxTokens: 512,
-  timeoutMs: 15_000,
+  maxTokens: 128,
+  timeoutMs: 30_000,
   fallbackIntent: "chat",
 };
 

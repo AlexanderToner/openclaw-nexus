@@ -16,8 +16,8 @@ interface ClassifierConfig {
 }
 
 const DEFAULT_CLASSIFIER_CONFIG: ClassifierConfig = {
-  maxTokens: 512,
-  timeoutMs: 15_000, // 15s for local model cold starts (qwen3.5:9b)
+  maxTokens: 128, // Short response needed - just JSON
+  timeoutMs: 30_000, // 30s for local model response
 };
 
 /**
@@ -52,33 +52,17 @@ export class IntentClassifier {
    * Build the classification prompt for the LLM.
    */
   private buildPrompt(message: string): string {
-    return `You are an intent classifier. Analyze the user message and output JSON.
+    return `<|im_start|>system
+You are an intent classifier. Output ONLY valid JSON, no other text.
+JSON schema:
+{"intent":"file_ops|gui_auto|browser|chat|code","requiredTools":["tool1"],"requiredFiles":["file1"],"requiredSkills":["skill1"],"contextSizeHint":"minimal|normal|full","confidence":0.95}
 
-User message: "${message}"
-
-Output ONLY valid JSON with these fields:
-{
-  "intent": "file_ops" | "gui_auto" | "browser" | "chat" | "code",
-  "requiredTools": ["tool1", "tool2"],
-  "requiredFiles": ["file1", "file2"],
-  "requiredSkills": ["skill1"],
-  "contextSizeHint": "minimal" | "normal" | "full",
-  "confidence": 0.95
-}
-
-Intent definitions:
-- file_ops: File/directory operations (read, write, move, delete, list)
-- gui_auto: Native desktop GUI automation (click, type, scroll)
-- browser: Web browser automation (navigate, click, extract)
-- chat: Simple conversation/questions needing no tools
-- code: Code analysis, generation, or modification
-
-Rules:
-- requiredTools: List specific tool names needed (e.g., "fs_read", "gui_click", "browser_navigate")
-- requiredFiles: List file paths or sections that should be loaded
-- contextSizeHint: "minimal" for simple tasks, "normal" for moderate, "full" for complex
-- confidence: 0.0-1.0 indicating how certain the classification is
-
-JSON output only, no explanation.`;
+Intent: file_ops=文件操作, gui_auto=桌面GUI自动化, browser=浏览器自动化, chat=对话, code=代码
+<|im_end|>
+<|im_start|>user
+Classify: ${message}
+<|im_end|>
+<|im_start|>assistant
+{"intent":"`;
   }
 }

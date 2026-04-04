@@ -203,8 +203,8 @@ export const AgentDefaultsSchema = z
             provider: z.enum(["ollama", "openai", "anthropic"]).optional(),
             modelId: z.string().optional(),
             endpoint: z.string().optional(),
-            maxTokens: z.number().int().min(64).max(4096).optional().default(512),
-            timeoutMs: z.number().int().min(500).max(60000).optional().default(15_000),
+            maxTokens: z.number().int().min(32).max(512).optional().default(128),
+            timeoutMs: z.number().int().min(500).max(120000).optional().default(30_000),
           })
           .strict()
           .optional(),
