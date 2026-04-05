@@ -41,6 +41,7 @@ export class PlaywrightAdapter implements BrowserInterface {
   private opts: Required<PlaywrightAdapterOptions>;
   private _lastStabilityStatus: StabilityStatus = "unknown";
   private _activeObserver: MutationObserver | null = null;
+  private frameIdCounter = 0;
 
   constructor(page: import("playwright").Page, options?: PlaywrightAdapterOptions) {
     this.page = page;
@@ -63,31 +64,175 @@ export class PlaywrightAdapter implements BrowserInterface {
     return this._lastStabilityStatus;
   }
 
-  // Placeholder — implemented in Task 2
-  async getContent(): Promise<string> {
-    throw new Error("Not yet implemented");
+  private inferIFrameLabel(src: string): string {
+    if (!src) {
+      return "Embedded Frame";
+    }
+    try {
+      const hostname = new URL(src, "http://localhost").hostname;
+      const rules: Array<[RegExp, string]> = [
+        [/checkout\.stripe\.com/, "Stripe Checkout"],
+        [/paypal\.com/, "PayPal Checkout"],
+        [/accounts\.google\.com/, "Google Sign-In"],
+        [/facebook\.com/, "Facebook Login"],
+        [/\.stripe\.com$/, "Payment"],
+        [/cdn\.|static\.|assets\./, "Embedded Content"],
+      ];
+      for (const [pattern, label] of rules) {
+        if (pattern.test(hostname)) {
+          return label;
+        }
+      }
+      return hostname;
+    } catch {
+      return "Embedded Frame";
+    }
   }
 
-  // Placeholder — implemented in Task 2
-  async getScreenshot(_options?: {
+  private processIFrame(el: { getAttribute(name: string): string | null }): string {
+    const src = el.getAttribute("src") ?? "";
+    const title = el.getAttribute("title");
+    const label = title ?? this.inferIFrameLabel(src);
+    this.frameIdCounter++;
+    const frameId = this.frameIdCounter;
+    return `<iframe data-frame-id="${frameId}" data-frame-src="${escapeAttr(src)}" data-frame-label="${escapeAttr(label)}" role="dialog"></iframe>`;
+  }
+
+  private processIframes(html: string): string {
+    if (!this.opts.iframe.extractLabel) {
+      return html;
+    }
+    return html.replace(/<iframe([^>]*)>/gi, (_match, attrs) => {
+      const fakeEl = {
+        getAttribute: (name: string) => {
+          const match = attrs.match(new RegExp(`${name}="([^"]*)"`, "i"));
+          return match ? match[1] : null;
+        },
+      };
+      return this.processIFrame(fakeEl as { getAttribute(name: string): string | null });
+    });
+  }
+
+  private async cleanupStabilityProbe(): Promise<void> {
+    try {
+      await this.page.evaluate(() => {
+        const win = window as unknown as Record<string, unknown>;
+        const probe = win.__stabilityProbe as { observer?: MutationObserver } | undefined;
+        if (probe?.observer) {
+          probe.observer.disconnect();
+          probe.observer = undefined;
+        }
+        delete win.__stabilityProbe;
+      });
+    } catch {
+      // Page may have navigated away during cleanup — silent ignore
+    }
+    this._activeObserver = null;
+  }
+
+  private async ensureStabilized(): Promise<StabilityStatus> {
+    const stability = this.opts.stability;
+    const quietThresholdMs: number = stability.quietThresholdMs ?? 300;
+    const hardTimeoutMs: number = stability.hardTimeoutMs ?? 3000;
+    const pollIntervalMs: number = stability.pollIntervalMs ?? 50;
+    const startTime = Date.now();
+    let lastMutation = startTime;
+
+    // Inject MutationObserver into page context
+    await this.page.evaluate(() => {
+      const win = window as unknown as Record<string, unknown>;
+      const existingProbe = win.__stabilityProbe as
+        | {
+            observer?: MutationObserver;
+            lastMutation: number;
+          }
+        | undefined;
+      if (existingProbe?.observer) {
+        existingProbe.observer.disconnect();
+      }
+      const observer = new MutationObserver(() => {
+        (win.__stabilityProbe as { lastMutation: number }).lastMutation = Date.now();
+      });
+      observer.observe(document.body, {
+        childList: true,
+        subtree: true,
+        attributes: true,
+      });
+      win.__stabilityProbe = { lastMutation: Date.now(), observer };
+    });
+
+    let settled = false;
+    while (!settled && Date.now() - startTime < hardTimeoutMs) {
+      await sleep(pollIntervalMs);
+      const elapsed = Date.now() - lastMutation;
+      if (elapsed >= quietThresholdMs) {
+        settled = true;
+      }
+      try {
+        const probe = await this.page.evaluate(() => {
+          const win = window as unknown as Record<string, unknown>;
+          const p = win.__stabilityProbe as { lastMutation: number } | undefined;
+          return p?.lastMutation ?? Date.now();
+        });
+        lastMutation = probe;
+      } catch {
+        settled = true;
+      }
+    }
+
+    await this.cleanupStabilityProbe();
+
+    const status = settled ? "stable" : "timeout_partial";
+    this._lastStabilityStatus = status;
+    return status;
+  }
+
+  async getContent(): Promise<string> {
+    const rawHtml = await this.page.content();
+    const processed = this.processIframes(rawHtml);
+    return scrubHtml(processed, { maxLength: this.opts.scrubMaxLength });
+  }
+
+  async getUrl(): Promise<string> {
+    return this.page.url();
+  }
+
+  async getScreenshot(options?: {
     quality?: number;
     fullPage?: boolean;
   }): Promise<Buffer | string> {
-    throw new Error("Not yet implemented");
+    return this.page.screenshot({
+      type: "jpeg",
+      quality: options?.quality ?? this.opts.screenshotQuality,
+      fullPage: options?.fullPage ?? false,
+    });
   }
 
-  // Placeholder — implemented in Task 2
-  async isVisible(_selector: string): Promise<boolean> {
-    throw new Error("Not yet implemented");
+  async isVisible(selector: string): Promise<boolean> {
+    try {
+      const locator = this.page.locator(selector).first();
+      return await locator.isVisible({ timeout: 2000 });
+    } catch {
+      return false;
+    }
   }
 
-  // Placeholder — implemented in Task 2
-  async getUrl(): Promise<string> {
-    throw new Error("Not yet implemented");
-  }
-
-  // Placeholder — implemented in Task 2
   async getVisualContext(): Promise<VisualContext> {
-    throw new Error("Not yet implemented");
+    const stability = await this.ensureStabilized();
+
+    const [screenshot, rawHtml] = await Promise.all([
+      this.page.screenshot({ type: "jpeg", quality: this.opts.screenshotQuality }),
+      this.page.content(),
+    ]);
+
+    const processed = this.processIframes(rawHtml);
+    const domSnapshot = scrubHtml(processed, { maxLength: this.opts.scrubMaxLength });
+
+    return {
+      screenshot,
+      domSnapshot,
+      capturedAt: Date.now(),
+      stability,
+    };
   }
 }
