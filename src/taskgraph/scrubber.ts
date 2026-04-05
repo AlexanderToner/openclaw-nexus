@@ -217,10 +217,10 @@ export class Scrubber {
 
   private serializeNodes(nodes: CDPSnapshotNode[]): string {
     const output: string[] = [];
+    let accumulated = 0;
 
     for (const node of nodes) {
-      const accumulated = output.join("");
-      if (accumulated.length >= this.maxLength) {
+      if (accumulated >= this.maxLength) {
         output.push(`\n<!-- TRUNCATED at ${this.maxLength} chars -->`);
         break;
       }
@@ -229,26 +229,31 @@ export class Scrubber {
         INTERACTIVE_TAGS.has(node.tag) || Boolean(node.role) || Boolean(node.boundingBox);
 
       if (isInteractive) {
-        this.interactiveCounter.value++;
+        const frameId = ++this.interactiveCounter.value;
         const bbox = node.boundingBox;
         const bboxAttr = bbox
           ? ` data-v-coords="${bbox.x},${bbox.y},${bbox.width},${bbox.height}"`
           : "";
-        output.push(
-          `<${node.tag} data-v-id="${this.interactiveCounter.value}"${bboxAttr}` +
-            (node.role ? ` role="${node.role}"` : "") +
-            (node.name ? ` aria-label="${node.name}"` : "") +
-            `>${node.text ?? ""}</${node.tag}>`,
-        );
+        const content =
+          `<${node.tag} data-v-id="${frameId}"${bboxAttr}` +
+          (node.role ? ` role="${node.role}"` : "") +
+          (node.name ? ` aria-label="${node.name}"` : "") +
+          `>${node.text ?? ""}</${node.tag}>`;
+        output.push(content);
+        accumulated += content.length;
       } else if (node.tag === "iframe") {
         const label = node.href ?? node.name ?? "Embedded Frame";
-        output.push(
-          `<div data-frame-id="${this.interactiveCounter.value++}" ` +
-            `data-frame-label="${this.escapeAttr(label)}" role="dialog"></div>`,
-        );
+        const frameId = ++this.interactiveCounter.value;
+        const content =
+          `<div data-frame-id="${frameId}" ` +
+          `data-frame-label="${this.escapeAttr(label)}" role="dialog"></div>`;
+        output.push(content);
+        accumulated += content.length;
       } else if (node.text && BLOCK_TAGS.has(node.tag)) {
         const indent = "  ".repeat(node.depth);
-        output.push(`${indent}<${node.tag}>${node.text}</${node.tag}>`);
+        const content = `${indent}<${node.tag}>${node.text}</${node.tag}>`;
+        output.push(content);
+        accumulated += content.length;
       }
     }
 

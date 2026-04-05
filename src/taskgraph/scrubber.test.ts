@@ -221,8 +221,8 @@ describe("Scrubber factory", () => {
       const scrubber = Scrubber.fromNodes(nodes);
       const html = scrubber.toHtml();
       expect(html).toContain('data-v-id="1"');
-      // iframe renders as data-frame-id placeholder, not data-v-id
-      expect(html).toContain('data-frame-id="1"');
+      // iframe renders as data-frame-id with next sequential value (data-v-id="1" for button, so iframe gets "2")
+      expect(html).toContain('data-frame-id="2"');
     });
 
     it("includes DPI-corrected boundingBox as data-v-coords", () => {
@@ -256,6 +256,27 @@ describe("Scrubber factory", () => {
       const scrubber = Scrubber.fromNodes(nodes, { maxLength: 500 });
       const html = scrubber.toHtml();
       expect(html).toContain("TRUNCATED");
+    });
+
+    it("truncates efficiently without O(n^2) re-scanning", () => {
+      // Each node produces ~250 chars. With maxLength=500, we need ~2-3 nodes before truncation.
+      // The O(n^2) bug would call output.join("") on every iteration, which would be slow.
+      // The O(n) fix tracks accumulated length incrementally.
+      const nodes = Array.from({ length: 1000 }, (_, i) => ({
+        ref: `n${i}`,
+        parentRef: i > 0 ? `n${i - 1}` : null,
+        depth: 0,
+        tag: "div",
+        text: "x".repeat(250),
+      }));
+      const scrubber = Scrubber.fromNodes(nodes, { maxLength: 500 });
+      const html = scrubber.toHtml();
+      // Should truncate before processing all 1000 nodes
+      expect(html).toContain("TRUNCATED");
+      // Should not contain all 1000 divs (only a few before hitting maxLength)
+      expect(html).not.toContain(`n999`);
+      // The output should be well under what 1000 nodes would produce
+      expect(html.length).toBeLessThan(1000);
     });
 
     it("toNodes returns original nodes", () => {
