@@ -14,6 +14,8 @@ import type {
   StabilityStatus,
   PlaywrightAdapterOptions,
 } from "../browser-interface.js";
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+import { scrubHtml } from "../scrubber.js";
 
 // Re-export config types from browser-interface so consumers only need one import
 export type {
@@ -22,10 +24,23 @@ export type {
   IFrameOptions,
 } from "../browser-interface.js";
 
+// Skeleton helpers — used by ensureStabilized() implemented in Task 2
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+// Skeleton helper — used by iframe scrubbing implemented in Task 2
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+function escapeAttr(value: string): string {
+  return value.replace(/"/g, "&quot;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+
 export class PlaywrightAdapter implements BrowserInterface {
   private page: import("playwright").Page;
   private opts: Required<PlaywrightAdapterOptions>;
   private _lastStabilityStatus: StabilityStatus = "unknown";
+  private _activeObserver: MutationObserver | null = null;
 
   constructor(page: import("playwright").Page, options?: PlaywrightAdapterOptions) {
     this.page = page;

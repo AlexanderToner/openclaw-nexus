@@ -37,11 +37,6 @@ export interface BrowserInterface {
 }
 
 /**
- * VisualContext-capable extension. getVisualContext is optional; callers must
- * check `browser.getVisualContext !== undefined` before calling it.
- */
-
-/**
  * Mock implementation for tests and environments without a real browser.
  * Returns synthetic data so hook logic (triggering, escalation) can be tested.
  */
