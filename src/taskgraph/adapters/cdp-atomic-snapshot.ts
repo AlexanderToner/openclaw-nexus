@@ -6,22 +6,8 @@
  */
 
 import type { Page } from "playwright-core";
-
-export type CDPSnapshotNode = {
-  ref: string;
-  parentRef: string | null;
-  depth: number;
-  tag: string;
-  id?: string;
-  className?: string;
-  role?: string;
-  name?: string;
-  text?: string;
-  href?: string;
-  type?: string;
-  value?: string;
-  boundingBox?: { x: number; y: number; width: number; height: number } | null;
-};
+import type { CDPSnapshotNode } from "../scrubber.js";
+export type { CDPSnapshotNode };
 
 export class NavigationDuringCaptureError extends Error {
   constructor(
