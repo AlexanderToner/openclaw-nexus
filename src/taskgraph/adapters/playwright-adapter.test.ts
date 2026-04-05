@@ -290,13 +290,17 @@ describe("PlaywrightAdapter", () => {
       name?: string;
       mainFrame?: boolean;
       frameElementBoundingBox?: { x: number; y: number; width: number; height: number } | null;
+      /** Returns the nodes this frame's evaluate() should return */
+      evaluateNodes?: any[];
     }): import("playwright").Frame {
       const url = opts.url ?? "https://example.com/page";
       const name = opts.name ?? "";
+      const evaluateNodes = opts.evaluateNodes ?? [];
       return {
         url: vi.fn().mockReturnValue(url),
         name: vi.fn().mockReturnValue(name),
         isOOPFrame: vi.fn().mockReturnValue(false),
+        evaluate: vi.fn().mockResolvedValue({ nodes: evaluateNodes }),
         ...(opts.mainFrame !== undefined ? { _isMainFrame: opts.mainFrame } : {}),
       } as unknown as import("playwright").Frame;
     }
@@ -313,18 +317,10 @@ describe("PlaywrightAdapter", () => {
       const mainFrameNodes = opts.mainFrameNodes ?? [];
       const subFrameNodes = opts.subFrameNodes ?? [];
 
-      const frameNodeMap = new Map<string, any[]>();
-      frameNodeMap.set("main", mainFrameNodes);
-      subFrames.forEach((f, i) => {
-        const name = `frame-${i + 1}`;
-        frameNodeMap.set(name, subFrameNodes[i] ?? []);
-      });
-
       // Map frame URL strings to their nodes (stable across frames() calls)
       const frameUrlToNodes = new Map<string, any[]>();
       subFrames.forEach((f, i) => {
         try {
-          // Use the frame's URL as the stable key
           const frameUrl = f.url();
           frameUrlToNodes.set(frameUrl, subFrameNodes[i] ?? []);
         } catch {
@@ -466,6 +462,7 @@ describe("PlaywrightAdapter", () => {
         url: "https://example.com/embedded/form",
         name: "checkout-frame",
         mainFrame: false,
+        evaluateNodes: SUB_FRAME_NODES,
       });
       const page = createMockPageWithFrames({
         mainFrameNodes: MAIN_FRAME_NODES,
@@ -490,6 +487,7 @@ describe("PlaywrightAdapter", () => {
         url: "https://example.com/embedded/form",
         name: "checkout-frame",
         mainFrame: false,
+        evaluateNodes: SUB_FRAME_NODES,
       });
       const page = createMockPageWithFrames({
         mainFrameNodes: MAIN_FRAME_NODES,

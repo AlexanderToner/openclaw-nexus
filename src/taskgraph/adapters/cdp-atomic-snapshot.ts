@@ -218,14 +218,15 @@ export interface MultiFrameAtomicResult {
 }
 
 /**
- * Captures atomic snapshot from the main frame and all same-origin sub-frames.
+ * Captures atomic snapshot from the main frame and all sub-frames.
  *
- * - Screenshot comes from the main frame only (covers full viewport).
- * - Main frame nodes tagged with frameRef="main".
- * - Same-origin sub-frames: captured in parallel with main frame.
- * - Each sub-frame's nodes get frameRef=frame.name() and absolute boundingBox
- *   (child node coordinates + parent iframe boundingBox offset).
- * - Cross-origin (OOPIF) frames are skipped (playwright marks them as OOP).
+ * Capture strategy (playwright-core 1.58.2):
+ * - Main frame: CDP atomic (screenshot + Runtime.evaluate in same session)
+ * - All sub-frames: frame.evaluate() — Playwright injects JS API into every frame,
+ *   including OOPIFs, so frame.evaluate() works for both same-origin AND cross-origin.
+ *
+ * Both methods return absolute boundingBox coordinates by adding the parent
+ * iframe's getBoundingClientRect offset to child element rects.
  */
 export async function captureMultiFrameAtomic(
   page: Page,
@@ -241,42 +242,14 @@ export async function captureMultiFrameAtomic(
   const quality = Math.max(1, Math.min(100, Math.round(options.quality ?? 60)));
   const captureSubframes = options.captureSubframes ?? false;
 
-  // Determine the main frame's origin for same-origin filtering
-  const mainUrl = page.url();
-  let mainOrigin = "";
-  try {
-    mainOrigin = new URL(mainUrl).origin;
-  } catch {}
-
-  // Enumerate all frames
+  // Enumerate all frames (excluding main)
   const allFrames = page.frames();
   const mainFrame = page.mainFrame();
-  const subFrames = captureSubframes
-    ? allFrames.filter((f) => {
-        if (f === mainFrame) {
-          return false;
-        }
-        // Skip OOP (cross-origin) frames
-        try {
-          return (f as unknown as { isOOPFrame?: () => boolean }).isOOPFrame?.() !== true;
-        } catch {
-          return false;
-        }
-      })
-    : [];
-
-  // Filter to same-origin only
-  const sameOriginSubFrames = subFrames.filter((f) => {
-    try {
-      return new URL(f.url(), mainUrl).origin === mainOrigin;
-    } catch {
-      return false;
-    }
-  });
+  const subFrames = captureSubframes ? allFrames.filter((f) => f !== mainFrame) : [];
 
   const capturedAt = Date.now();
 
-  // Capture screenshot from main frame (creates the atomic session)
+  // ── Main frame atomic capture ─────────────────────────────────────────────
   const session = await page.context().newCDPSession(mainFrame);
   let screenshot = Buffer.alloc(0);
 
@@ -303,7 +276,7 @@ export async function captureMultiFrameAtomic(
     const base64 = (screenshotResult as { data?: string })?.data ?? "";
     screenshot = Buffer.from(base64, "base64");
 
-    // Capture main frame DOM with boundingBox evaluation
+    // Main frame DOM with ALL boundingBoxes (for iframe offset lookup)
     const mainEvalResult = await session.send("Runtime.evaluate", {
       expression: SNAPSHOT_DOM_EXPRESSION_WITH_BBOX(limit, maxTextChars),
       returnByValue: true,
@@ -315,57 +288,36 @@ export async function captureMultiFrameAtomic(
       frameRef: "main",
     }));
 
-    // Gather iframe placeholder boundingBoxes for offset calculation
+    // Build iframe boundingBox map for offset calculation
     const iframeBboxes = new Map<string, { x: number; y: number; width: number; height: number }>();
     for (const node of mainNodes) {
       if (node.tag === "iframe" && node.boundingBox) {
-        const frame = sameOriginSubFrames.find(
-          (f) => f.url() === node.href || f.name() === node.name,
-        );
-        if (frame) {
-          iframeBboxes.set(frame.name() || fUrl(frame), node.boundingBox);
+        const key = node.name ?? node.href ?? "";
+        if (key) {
+          iframeBboxes.set(key, node.boundingBox);
         }
       }
     }
 
-    // Capture same-origin sub-frames in parallel (separate sessions)
+    // ── Sub-frame capture via frame.evaluate() (works for ALL iframe types) ──
     const subFrameResults = await Promise.allSettled(
-      sameOriginSubFrames.map(async (frame) => {
+      subFrames.map(async (frame) => {
         const frameName = frame.name() || fUrl(frame);
-        const bbox = iframeBboxes.get(frameName);
-        const frameSession = await page.context().newCDPSession(frame);
+        const iframeOffset = iframeBboxes.get(frameName);
         try {
-          await frameSession.send("Runtime.enable").catch(() => {});
-          const result = await frameSession.send("Runtime.evaluate", {
-            expression: SNAPSHOT_DOM_EXPRESSION_WITH_BBOX(limit, maxTextChars),
-            returnByValue: true,
-            awaitPromise: true,
-          });
-          const nodes = parseNodesWithBbox(result);
-
-          // Apply iframe offset to boundingBox coordinates
-          if (bbox) {
-            return nodes.map((n) => ({
-              ...n,
-              frameRef: frameName,
-              boundingBox: n.boundingBox
-                ? {
-                    x: n.boundingBox.x + bbox.x,
-                    y: n.boundingBox.y + bbox.y,
-                    width: n.boundingBox.width,
-                    height: n.boundingBox.height,
-                  }
-                : undefined,
-            }));
-          }
-          return nodes.map((n) => ({ ...n, frameRef: frameName }));
-        } finally {
-          await frameSession.detach().catch(() => {});
+          const evalExpr = SNAPSHOT_DOM_EXPRESSION_WITH_BBOX(limit, maxTextChars);
+          const result = await frame.evaluate(evalExpr);
+          const nodes = parseNodesWithBboxFromEvalResult(result);
+          return tagFrameNodes(nodes, frameName, iframeOffset);
+        } catch {
+          // frame.evaluate() fails if the iframe has no JS execution context yet
+          // (e.g., during rapid navigation). Skip non-fatally.
+          return [];
         }
       }),
     );
 
-    // Merge results, skipping failed subframes (non-fatal)
+    // Merge results (non-fatal — skip failed frames)
     const mergedNodes: MultiFrameSnapshotNode[] = [...mainNodesTagged];
     for (const result of subFrameResults) {
       if (result.status === "fulfilled") {
@@ -373,7 +325,9 @@ export async function captureMultiFrameAtomic(
       }
     }
 
-    const capturedSubframes = subFrameResults.filter((r) => r.status === "fulfilled").length;
+    const capturedSubframes = subFrameResults.filter(
+      (r) => r.status === "fulfilled" && r.value.length > 0,
+    ).length;
 
     return {
       screenshot,
@@ -386,6 +340,29 @@ export async function captureMultiFrameAtomic(
   }
 }
 
+/** Tag frame nodes with frameRef and apply iframe boundingBox offset */
+function tagFrameNodes(
+  nodes: CDPSnapshotNode[],
+  frameName: string,
+  iframeOffset: { x: number; y: number; width: number; height: number } | undefined,
+): MultiFrameSnapshotNode[] {
+  if (iframeOffset) {
+    return nodes.map((n) => ({
+      ...n,
+      frameRef: frameName,
+      boundingBox: n.boundingBox
+        ? {
+            x: n.boundingBox.x + iframeOffset.x,
+            y: n.boundingBox.y + iframeOffset.y,
+            width: n.boundingBox.width,
+            height: n.boundingBox.height,
+          }
+        : undefined,
+    }));
+  }
+  return nodes.map((n) => ({ ...n, frameRef: frameName }));
+}
+
 function fUrl(frame: import("playwright-core").Frame): string {
   try {
     return frame.url();
@@ -394,7 +371,23 @@ function fUrl(frame: import("playwright-core").Frame): string {
   }
 }
 
-/** Parse evaluate result that includes boundingBox in each node */
+/**
+ * Parse result from frame.evaluate() — returns the value directly, not wrapped in
+ * {result: {value: ...}} like CDP Runtime.evaluate does.
+ */
+function parseNodesWithBboxFromEvalResult(result: unknown): CDPSnapshotNode[] {
+  if (!result || typeof result !== "object") {
+    return [];
+  }
+  const obj = result as { nodes?: unknown };
+  const nodes = obj?.nodes;
+  if (!Array.isArray(nodes)) {
+    return [];
+  }
+  return nodes as CDPSnapshotNode[];
+}
+
+/** Parse evaluate result that includes boundingBox in each node (CDP Runtime.evaluate format) */
 function parseNodesWithBbox(result: unknown): CDPSnapshotNode[] {
   if (!result || typeof result !== "object") {
     return [];
