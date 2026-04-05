@@ -224,6 +224,7 @@ export const AgentDefaultsSchema = z
           .array(z.enum(["file_ops", "gui_auto", "browser", "chat", "code"]))
           .optional()
           .default(["gui_auto", "browser"]),
+        visionEnabled: z.boolean().optional().default(false),
         limits: z
           .object({
             maxSteps: z.number().int().min(1).max(100).optional().default(50),

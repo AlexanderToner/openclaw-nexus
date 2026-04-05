@@ -86,4 +86,64 @@ describe("VikingRouter", () => {
     expect(result.decision.intent).toBe("chat");
     expect(result.decision.confidence).toBeLessThan(0.5);
   });
+
+  it("falls back when confidence is below threshold", async () => {
+    // Inline factory so each call gets a fresh object — avoids mutation leakage
+    const mockApplyFilters = vi.fn().mockReturnValue({
+      tools: [],
+      files: [],
+      skills: [],
+      tokenSavingsPercent: 0,
+    });
+    const mockFilter = { applyFilters: mockApplyFilters };
+    const router = new VikingRouter(
+      {
+        classify: () =>
+          Promise.resolve({
+            intent: "browser",
+            requiredTools: ["browser"],
+            requiredFiles: [],
+            requiredSkills: [],
+            contextSizeHint: "normal" as const,
+            confidence: 0.3,
+          }),
+      } as never,
+      mockFilter as never,
+      { fallbackIntent: "chat" },
+    );
+    const result = await router.routeWithThreshold("ambiguous request");
+    expect(result.decision.intent).toBe("chat");
+    expect(result.decision.confidence).toBe(0.1);
+    expect(result.success).toBe(false);
+    expect(result.reason).toBe("confidence_below_threshold");
+  });
+
+  it("proceeds when confidence is at or above threshold", async () => {
+    const mockApplyFilters = vi.fn().mockReturnValue({
+      tools: ["fs_read"],
+      files: [],
+      skills: [],
+      tokenSavingsPercent: 80,
+    });
+    const mockFilter = { applyFilters: mockApplyFilters };
+    const router = new VikingRouter(
+      {
+        classify: () =>
+          Promise.resolve({
+            intent: "file_ops",
+            requiredTools: ["fs_read"],
+            requiredFiles: [],
+            requiredSkills: [],
+            contextSizeHint: "minimal" as const,
+            confidence: 0.85,
+          }),
+      } as never,
+      mockFilter as never,
+      { fallbackIntent: "chat" },
+    );
+    const result = await router.routeWithThreshold("list files");
+    expect(result.decision.intent).toBe("file_ops");
+    expect(result.success).toBe(true);
+    expect(result.reason).toBeUndefined();
+  });
 });

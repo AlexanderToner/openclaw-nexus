@@ -20,6 +20,9 @@ export interface RouterResult {
 
   /** Whether routing succeeded or used fallback */
   success: boolean;
+
+  /** Why the routing decision was made (e.g. "confidence_below_threshold") */
+  reason?: string;
 }
 
 export interface RouterOptions {
@@ -91,6 +94,32 @@ export class VikingRouter {
       filteredContext,
       success,
     };
+  }
+
+  /**
+   * Route with confidence threshold gating.
+   * If the classified confidence is below threshold, forces fallback intent
+   * and marks the result with reason="confidence_below_threshold".
+   */
+  async routeWithThreshold(
+    userMessage: string,
+    availableContext?: {
+      tools: string[];
+      files: string[];
+      skills: string[];
+    },
+    confidenceThreshold = 0.7,
+  ): Promise<RouterResult> {
+    const result = await this.route(userMessage, availableContext);
+
+    if (result.decision.confidence < confidenceThreshold) {
+      result.decision.intent = this.options.fallbackIntent;
+      result.decision.confidence = 0.1;
+      result.success = false;
+      result.reason = "confidence_below_threshold";
+    }
+
+    return result;
   }
 
   /**

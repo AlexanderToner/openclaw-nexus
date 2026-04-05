@@ -1,7 +1,7 @@
 import * as fs from "fs/promises";
 import * as path from "path";
 // src/taskgraph/assertion-engine.test.ts
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { AssertionEngine } from "./assertion-engine.js";
 import type { Assertion } from "./types.js";
 
@@ -133,6 +133,73 @@ describe("AssertionEngine", () => {
       };
 
       expect(await engine.evaluate(assertion)).toBe(false);
+    });
+  });
+
+  describe("custom", () => {
+    it("returns false and logs warning when command is missing", async () => {
+      const assertion: Assertion = {
+        type: "custom",
+        description: "Verify browser state via visual check",
+      };
+
+      const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+
+      const result = await engine.evaluate(assertion);
+      expect(result).toBe(false);
+      expect(warnSpy).toHaveBeenCalled();
+      expect(warnSpy.mock.calls[0][0]).toContain("Assertion failed");
+
+      warnSpy.mockRestore();
+    });
+
+    it("returns false with domSnapshot in warning when snapshot provided", async () => {
+      const assertion: Assertion = {
+        type: "custom",
+        description: "Check page loaded correctly",
+      };
+      const snapshot = "<html><body>Login successful</body></html>";
+
+      const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+
+      const result = await engine.evaluate(assertion, snapshot);
+      expect(result).toBe(false);
+      expect(warnSpy).toHaveBeenCalled();
+
+      warnSpy.mockRestore();
+    });
+
+    it("returns true when command exits with code 0 and no stderr", async () => {
+      const assertion: Assertion = {
+        type: "custom",
+        command: "echo 'ok'",
+        description: "Verify build succeeded",
+      };
+
+      const result = await engine.evaluate(assertion);
+      expect(result).toBe(true);
+    });
+
+    it("returns false when command exits with non-zero code", async () => {
+      const assertion: Assertion = {
+        type: "custom",
+        command: "exit 1",
+        description: "Verify command fails",
+      };
+
+      const result = await engine.evaluate(assertion);
+      expect(result).toBe(false);
+    });
+
+    it("returns false when command times out", async () => {
+      const assertion: Assertion = {
+        type: "custom",
+        command: "sleep 10",
+        description: "Long running check",
+      };
+
+      const result = await engine.evaluate(assertion);
+      expect(result).toBe(false);
     });
   });
 

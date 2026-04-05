@@ -8,6 +8,7 @@
 
 import type { SecurityArbiter } from "../security/arbiter.js";
 import { AssertionEngine } from "./assertion-engine.js";
+import type { BrowserInterface } from "./browser-interface.js";
 import { TaskLimitsChecker } from "./limits.js";
 import { TaskGraphStore } from "./store.js";
 import type { TaskGraph, Step, StepType } from "./types.js";
@@ -25,6 +26,8 @@ export interface ExecutionContext {
   workingDir: string;
   state: Map<string, unknown>;
   securityArbiter?: SecurityArbiter;
+  /** Browser handle for VisionVerificationHook and browser step execution */
+  browser?: BrowserInterface;
 }
 
 /**
@@ -36,6 +39,8 @@ export interface StepResult {
   output?: unknown;
   error?: StepError;
   stateUpdates?: Record<string, unknown>;
+  /** DOM snapshot captured by executor at verification time */
+  lastDomSnapshot?: string;
 }
 
 export type StepResultStatus = "success" | "failed" | "skipped";
@@ -49,7 +54,12 @@ export interface StepError {
   retryable: boolean;
 }
 
-export type ErrorType = "security_blocked" | "timeout" | "execution_error" | "dependency_failed";
+export type ErrorType =
+  | "security_blocked"
+  | "timeout"
+  | "execution_error"
+  | "dependency_failed"
+  | "unimplemented";
 
 /**
  * Execution options.

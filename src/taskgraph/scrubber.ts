@@ -40,6 +40,13 @@ export interface CDPSnapshotNode {
   value?: string;
   /** Physical pixel coordinates (DPR-corrected via window.devicePixelRatio) */
   boundingBox?: { x: number; y: number; width: number; height: number } | null;
+  /**
+   * Phase 2b: Identifies which frame this node came from.
+   * "main" = top-level page frame.
+   * A frame name string = a named iframe subframe.
+   * Absent = legacy node (no frame context tracked).
+   */
+  frameRef?: string;
 }
 
 // ============================================================================

@@ -56,6 +56,7 @@ export class PlaywrightAdapter implements BrowserInterface {
       scrubMaxLength: options?.scrubMaxLength ?? 8000,
       screenshotQuality: options?.screenshotQuality ?? 60,
       useCDPAtomic: options?.useCDPAtomic ?? false,
+      captureSubframes: options?.captureSubframes ?? false,
     };
   }
 
@@ -261,9 +262,11 @@ export class PlaywrightAdapter implements BrowserInterface {
   /**
    * CDP atomic snapshot: screenshot and DOM tree captured in the same render frame.
    * Requires useCDPAtomic: true in constructor options.
+   * Phase 2b Milestone 1: When captureSubframes=true, also captures same-origin
+   * iframe content with absolute coordinate alignment.
    */
   async getCDPAtomicContext(): Promise<VisualContext> {
-    const { captureCDPAtomic } = await import("./cdp-atomic-snapshot.js");
+    const { captureCDPAtomic, captureMultiFrameAtomic } = await import("./cdp-atomic-snapshot.js");
 
     // Pre-check: ensure page is not still loading
     try {
@@ -274,11 +277,32 @@ export class PlaywrightAdapter implements BrowserInterface {
     } catch {}
 
     try {
-      const { screenshot, nodes, capturedAt } = await captureCDPAtomic(this.page, {
-        limit: 800,
-        maxTextChars: 220,
-        quality: this.opts.screenshotQuality,
-      });
+      let nodes: import("../scrubber.js").CDPSnapshotNode[];
+      let capturedAt: number;
+      let screenshot = Buffer.alloc(0);
+
+      if (this.opts.captureSubframes) {
+        // Phase 2b Milestone 1: multi-frame capture
+        const result = await captureMultiFrameAtomic(this.page, {
+          limit: 800,
+          maxTextChars: 220,
+          quality: this.opts.screenshotQuality,
+          captureSubframes: true,
+        });
+        screenshot = Buffer.from(result.screenshot);
+        nodes = result.nodes;
+        capturedAt = result.capturedAt;
+      } else {
+        // Single-frame atomic capture (Phase 2a.6)
+        const result = await captureCDPAtomic(this.page, {
+          limit: 800,
+          maxTextChars: 220,
+          quality: this.opts.screenshotQuality,
+        });
+        screenshot = Buffer.from(result.screenshot);
+        nodes = result.nodes;
+        capturedAt = result.capturedAt;
+      }
 
       const scrubber = Scrubber.fromNodes(nodes, { maxLength: this.opts.scrubMaxLength });
       const domSnapshot = scrubber.toHtml();

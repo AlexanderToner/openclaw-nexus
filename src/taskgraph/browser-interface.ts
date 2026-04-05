@@ -150,6 +150,13 @@ export interface PlaywrightAdapterOptions {
   screenshotQuality?: number;
   /** Enable CDP atomic snapshot path (default: false for backward compatibility) */
   useCDPAtomic?: boolean;
+  /**
+   * Phase 2b Milestone 1: Recursively capture same-origin iframe content.
+   * When useCDPAtomic=true, enumerates page.frames() and captures each same-origin
+   * sub-frame atomically. Cross-origin (OOPIF) frames are skipped.
+   * Default: false.
+   */
+  captureSubframes?: boolean;
 }
 
 /**

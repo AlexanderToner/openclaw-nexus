@@ -397,6 +397,8 @@ export type TaskGraphConfig = {
   enabled?: boolean;
   /** Intents that trigger TaskGraph execution (default: ["gui_auto", "browser"]). */
   triggerIntents?: Array<"file_ops" | "gui_auto" | "browser" | "chat" | "code">;
+  /** Enable VisionVerificationHook (Phase 2: requires browser handle injection). */
+  visionEnabled?: boolean;
   /** Execution limits. */
   limits?: {
     /** Maximum steps in a TaskGraph (default: 50). */

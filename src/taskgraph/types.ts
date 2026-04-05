@@ -55,12 +55,7 @@ export interface TaskGraph {
   replanCount: number;
 }
 
-export type TaskStatus =
-  | "pending"
-  | "running"
-  | "completed"
-  | "failed"
-  | "replanning";
+export type TaskStatus = "pending" | "running" | "completed" | "failed" | "replanning";
 
 /**
  * Step represents a single atomic operation in the TaskGraph.
@@ -144,4 +139,28 @@ export interface BrowserAction {
   selector?: string;
   payload?: string;
   timeoutMs?: number;
+}
+
+/**
+ * VisionRequiredError signals that a step's result requires visual verification
+ * because the executor's model of the world diverged from the actual browser state.
+ *
+ * This is an Environment Error, not a task failure. The retry strategy is
+ * "refresh/reinspect" (re-capture VisualContext and re-verify), not re-executing
+ * the same action blindly.
+ *
+ * Phase 2: Thrown by AssertionEngine when __vision_check__ cannot be resolved,
+ * caught by TaskGraphExecutorInstance, which escalates to VisionVerificationHook
+ * before deciding whether to retry or abort.
+ */
+export interface VisionRequiredError {
+  readonly type: "vision_required";
+  readonly stepId: string;
+  readonly reason: string;
+  /** VisualContext timestamp at the time the environment mismatch was detected */
+  readonly capturedAt: number;
+  /** DOM snapshot at detection time (first N chars) */
+  readonly domHint?: string;
+  /** Whether retry via VisionVerificationHook is recommended */
+  readonly retryable: true;
 }

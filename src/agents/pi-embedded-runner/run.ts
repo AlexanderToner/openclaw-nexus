@@ -93,6 +93,46 @@ import {
   truncateOversizedToolResultsInSession,
 } from "./tool-result-truncation.js";
 import type { EmbeddedPiAgentMeta, EmbeddedPiRunResult } from "./types.js";
+
+/**
+ * Build a human-readable summary from TaskGraph execution result.
+ */
+function buildTaskGraphSummary(result: TaskGraphExecutionResult): string {
+  const completed = result.completedSteps.length;
+  const failed = result.failedSteps.length;
+  const total = completed + failed;
+
+  if (result.success && result.goalPassed) {
+    const stepDetails = result.completedSteps
+      .map((s) => {
+        const output = s.output ? `: ${JSON.stringify(s.output)}` : "";
+        return `  - ${s.stepId}${output}`;
+      })
+      .join("\n");
+
+    return (
+      `✅ TaskGraph completed successfully\n\n` +
+      `Goal: ${result.goal}\n\n` +
+      `Steps completed (${completed}/${total}):\n${stepDetails || "  (no steps)"}\n\n` +
+      `Duration: ${result.durationMs}ms`
+    );
+  }
+
+  return (
+    `⚠️ TaskGraph execution ${result.success ? "partially completed" : "failed"}\n\n` +
+    `Goal: ${result.goal}\n\n` +
+    `Completed: ${completed}/${total} steps\n` +
+    `Failed: ${failed} steps\n` +
+    `Reason: ${result.goalReason ?? result.error ?? "unknown"}\n\n` +
+    `Duration: ${result.durationMs}ms`
+  );
+}
+import {
+  createTaskGraphExecutor,
+  shouldTriggerTaskGraph,
+  type TaskGraphProgressEvent,
+  type TaskGraphExecutionResult,
+} from "./taskgraph-executor.js";
 import { createUsageAccumulator, mergeUsageIntoAccumulator } from "./usage-accumulator.js";
 import { describeUnknownError } from "./utils.js";
 import { createVikingLlmCaller } from "./viking-llm-caller.js";
@@ -425,6 +465,7 @@ export async function runEmbeddedPiAgent(
 
         // Initialize Viking Router if enabled
         const vikingConfig = params.config?.agents?.defaults?.viking;
+        const taskgraphConfig = params.config?.agents?.defaults?.taskgraph;
         let vikingRouter: VikingRouter | undefined;
         let currentRouteDecision: RouteDecision | undefined;
 
@@ -497,21 +538,26 @@ export async function runEmbeddedPiAgent(
           if (vikingRouter) {
             const vikingStart = Date.now();
             try {
-              const routeResult = await vikingRouter.route(params.prompt);
+              const routeResult = await vikingRouter.routeWithThreshold(
+                params.prompt,
+                undefined,
+                vikingConfig?.confidenceThreshold ?? 0.7,
+              );
               const vikingDuration = Date.now() - vikingStart;
               currentRouteDecision = routeResult.decision;
 
               // Log detailed routing information
               const tools = routeResult.decision.requiredTools.join(",") || "none";
               const files = routeResult.decision.requiredFiles.join(",") || "none";
+              const reason = routeResult.reason ? ` reason=${routeResult.reason}` : "";
 
               if (!routeResult.success) {
                 log.info(
-                  `[viking] FALLBACK: intent=${routeResult.decision.intent} conf=${routeResult.decision.confidence.toFixed(2)} tools=[${tools}] files=[${files}] duration=${vikingDuration}ms (classification failed)`,
+                  `[viking] FALLBACK: intent=${routeResult.decision.intent} conf=${routeResult.decision.confidence.toFixed(2)} tools=[${tools}] files=[${files}] duration=${vikingDuration}ms (classification failed)${reason}`,
                 );
               } else {
                 log.info(
-                  `[viking] OK: intent=${routeResult.decision.intent} conf=${routeResult.decision.confidence.toFixed(2)} tools=[${tools}] files=[${files}] hint=${routeResult.decision.contextSizeHint} duration=${vikingDuration}ms`,
+                  `[viking] OK: intent=${routeResult.decision.intent} conf=${routeResult.decision.confidence.toFixed(2)} tools=[${tools}] files=[${files}] hint=${routeResult.decision.contextSizeHint} duration=${vikingDuration}ms${reason}`,
                 );
               }
             } catch (err) {
@@ -519,6 +565,76 @@ export async function runEmbeddedPiAgent(
               log.warn(
                 `[viking] FAILED: error=${describeUnknownError(err)} duration=${vikingDuration}ms`,
               );
+            }
+          }
+
+          // Execute TaskGraph if Viking classified a complex intent
+          if (
+            taskgraphConfig?.enabled &&
+            currentRouteDecision &&
+            shouldTriggerTaskGraph(currentRouteDecision, taskgraphConfig)
+          ) {
+            const taskgraphStart = Date.now();
+            log.info(
+              `[taskgraph] triggering execution: intent=${currentRouteDecision.intent} conf=${currentRouteDecision.confidence.toFixed(2)}`,
+            );
+
+            try {
+              const taskgraphExecutor = createTaskGraphExecutor(
+                currentRouteDecision,
+                params.prompt,
+                {
+                  config: taskgraphConfig,
+                  planningModelId: modelId,
+                  planningProvider: provider,
+                  planningEndpoint: undefined, // Uses default endpoint from taskgraph-executor
+                  workingDir: resolvedWorkspace,
+                  onProgress: (event: TaskGraphProgressEvent) => {
+                    if (event.type === "step_started") {
+                      log.debug(
+                        `[taskgraph] step=${event.stepId} started (${event.stepIndex + 1}/${event.totalSteps})`,
+                      );
+                    } else if (event.type === "step_completed") {
+                      log.debug(`[taskgraph] step=${event.stepId} ${event.status}`);
+                    } else if (event.type === "goal_passed") {
+                      log.info(`[taskgraph] goal passed`);
+                    } else if (event.type === "goal_failed") {
+                      log.warn(`[taskgraph] goal failed: ${event.reason}`);
+                    } else if (event.type === "failed") {
+                      log.error(`[taskgraph] execution failed: ${event.error}`);
+                    }
+                  },
+                },
+              );
+
+              const taskgraphResult = await taskgraphExecutor.execute();
+              const taskgraphDuration = Date.now() - taskgraphStart;
+
+              log.info(
+                `[taskgraph] completed: success=${taskgraphResult.success} steps=${taskgraphResult.completedSteps.length}/${taskgraphResult.completedSteps.length + taskgraphResult.failedSteps.length} duration=${taskgraphDuration}ms`,
+              );
+
+              // If TaskGraph succeeded, return the result
+              if (taskgraphResult.success && taskgraphResult.goalPassed) {
+                const summary = buildTaskGraphSummary(taskgraphResult);
+                return {
+                  payloads: [{ text: summary }],
+                  meta: {
+                    durationMs: Date.now() - started,
+                  },
+                };
+              }
+
+              // TaskGraph failed or goal not passed - fall through to normal attempt
+              log.info(
+                `[taskgraph] falling through to normal attempt: success=${taskgraphResult.success} goalPassed=${taskgraphResult.goalPassed}`,
+              );
+            } catch (err) {
+              const taskgraphDuration = Date.now() - taskgraphStart;
+              log.warn(
+                `[taskgraph] execution error: ${describeUnknownError(err)} duration=${taskgraphDuration}ms`,
+              );
+              // Fall through to normal attempt on error
             }
           }
 
