@@ -220,10 +220,29 @@ export class PlaywrightAdapter implements BrowserInterface {
   }
 
   async getVisualContext(): Promise<VisualContext> {
+    const start = performance.now();
+    const path = this.opts.useCDPAtomic ? "CDP-Atomic" : "Legacy-HTML";
+    let context: VisualContext;
+
     if (this.opts.useCDPAtomic) {
-      return await this.getCDPAtomicContext();
+      context = await this.getCDPAtomicContext();
+    } else {
+      context = await this.getLegacyContext();
     }
-    // Legacy path: ensureStabilized + Promise.all
+
+    const duration = performance.now() - start;
+    console.debug(
+      `[VisualContext] Path: ${path}, Stability: ${context.stability}, ` +
+        `Duration: ${duration.toFixed(2)}ms, Nodes: ${context.nodes?.length ?? 0}`,
+    );
+    return context;
+  }
+
+  /**
+   * Legacy snapshot path: MutationObserver stabilization + Promise.all screenshot/content.
+   * Preserved for backward compatibility; use getVisualContext() which adds observability.
+   */
+  private async getLegacyContext(): Promise<VisualContext> {
     const stability = await this.ensureStabilized();
     const [screenshot, rawHtml] = await Promise.all([
       this.page.screenshot({ type: "jpeg", quality: this.opts.screenshotQuality }),
@@ -231,10 +250,9 @@ export class PlaywrightAdapter implements BrowserInterface {
     ]);
     const processed = this.processIframes(rawHtml);
     const scrubber = Scrubber.fromHtml(processed, { maxLength: this.opts.scrubMaxLength });
-    const domSnapshot = scrubber.toHtml();
     return {
       screenshot,
-      domSnapshot,
+      domSnapshot: scrubber.toHtml(),
       capturedAt: Date.now(),
       stability,
     };
