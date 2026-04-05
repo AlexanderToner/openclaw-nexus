@@ -288,45 +288,98 @@ export async function captureMultiFrameAtomic(
       frameRef: "main",
     }));
 
-    // Build iframe boundingBox map for offset calculation
-    const iframeBboxes = new Map<string, { x: number; y: number; width: number; height: number }>();
+    // ── Step 1: Collect all iframe boundingBoxes from EVERY frame ────────────────
+    // For each frame, evaluate all its iframe elements' boundingBoxes.
+    // This gives us the parent→child relationships: frame X's iframe bbox
+    // tells us child frame Y's position in frame X's coordinate system.
+    //
+    // Structure: childFrameUrl → { parentFrameUrl, bbox }
+    // where "bbox" is the iframe element's boundingBox in parentFrame's coords.
+    type IframeBboxEntry = {
+      parentUrl: string;
+      bbox: { x: number; y: number; width: number; height: number };
+    };
+    const childFrameParentBbox = new Map<string, IframeBboxEntry>();
+
+    // Main frame: extract iframe bboxes from already-captured mainNodes (CDP capture)
+    const mainFrameUrl = page.url();
     for (const node of mainNodes) {
-      if (node.tag === "iframe" && node.boundingBox) {
-        const key = node.name ?? node.href ?? "";
-        if (key) {
-          iframeBboxes.set(key, node.boundingBox);
+      if (node.tag === "iframe" && node.boundingBox && node.href) {
+        childFrameParentBbox.set(node.href, { parentUrl: mainFrameUrl, bbox: node.boundingBox });
+      }
+    }
+
+    // Sub-frames: use frame.evaluate() to get their iframe bboxes
+    const iframeBboxResults = await Promise.allSettled(
+      subFrames.map((frame) => collectIframeBboxes(frame)),
+    );
+    for (const result of iframeBboxResults) {
+      if (result.status === "fulfilled") {
+        for (const [childUrl, entry] of result.value) {
+          childFrameParentBbox.set(childUrl, entry);
         }
       }
     }
 
-    // ── Sub-frame capture via frame.evaluate() (works for ALL iframe types) ──
-    const subFrameResults = await Promise.allSettled(
+    // ── Step 2: Build cumulative offset chain for each frame URL ───────────────
+    // offsetChain[frameUrl] = absolute pixel offset from top-level viewport origin.
+    // Main frame is always at (0, 0). Child frames accumulate parent iframe offsets.
+    const offsetChain = new Map<string, { x: number; y: number }>();
+    offsetChain.set("main", { x: 0, y: 0 });
+
+    function getAbsoluteOffset(frameUrl: string): { x: number; y: number } {
+      if (offsetChain.has(frameUrl)) {
+        return offsetChain.get(frameUrl)!;
+      }
+      const entry = childFrameParentBbox.get(frameUrl);
+      if (!entry) {
+        const zero = { x: 0, y: 0 };
+        offsetChain.set(frameUrl, zero);
+        return zero;
+      }
+      const parentOffset = getAbsoluteOffset(entry.parentUrl);
+      const offset = { x: parentOffset.x + entry.bbox.x, y: parentOffset.y + entry.bbox.y };
+      offsetChain.set(frameUrl, offset);
+      return offset;
+    }
+    for (const raw of subFrames) {
+      getAbsoluteOffset(fUrl(raw));
+    }
+
+    // ── Step 3: Capture DOM nodes from all sub-frames in parallel ───────────
+    const subFrameRawResults = await Promise.allSettled(
       subFrames.map(async (frame) => {
-        const frameName = frame.name() || fUrl(frame);
-        const iframeOffset = iframeBboxes.get(frameName);
+        const frameUrl = fUrl(frame);
         try {
           const evalExpr = SNAPSHOT_DOM_EXPRESSION_WITH_BBOX(limit, maxTextChars);
           const result = await frame.evaluate(evalExpr);
           const nodes = parseNodesWithBboxFromEvalResult(result);
-          return tagFrameNodes(nodes, frameName, iframeOffset);
+          return { frame, frameUrl, nodes };
         } catch {
-          // frame.evaluate() fails if the iframe has no JS execution context yet
-          // (e.g., during rapid navigation). Skip non-fatally.
-          return [];
+          return { frame, frameUrl, nodes: [] as CDPSnapshotNode[] };
         }
       }),
     );
 
+    // ── Step 4: Tag nodes with frameRef and absolute boundingBox ─────────────
+    const taggedResults = subFrameRawResults.map((raw) => {
+      if (raw.status !== "fulfilled") {
+        return [];
+      }
+      const { frame, frameUrl, nodes } = raw.value;
+      const frameName = frame.name() || frameUrl;
+      const offset = getAbsoluteOffset(frameUrl);
+      return tagFrameNodes(nodes, frameName, offset);
+    });
+
     // Merge results (non-fatal — skip failed frames)
     const mergedNodes: MultiFrameSnapshotNode[] = [...mainNodesTagged];
-    for (const result of subFrameResults) {
-      if (result.status === "fulfilled") {
-        mergedNodes.push(...result.value);
-      }
+    for (const tagged of taggedResults) {
+      mergedNodes.push(...tagged);
     }
 
-    const capturedSubframes = subFrameResults.filter(
-      (r) => r.status === "fulfilled" && r.value.length > 0,
+    const capturedSubframes = subFrameRawResults.filter(
+      (r) => r.status === "fulfilled" && r.value.nodes.length > 0,
     ).length;
 
     return {
@@ -340,27 +393,98 @@ export async function captureMultiFrameAtomic(
   }
 }
 
-/** Tag frame nodes with frameRef and apply iframe boundingBox offset */
+/**
+ * Collect all iframe boundingBoxes from a frame's DOM.
+ * Returns: Map<childFrameUrl → { parentUrl, bbox }>
+ *
+ * The child frame URL is matched via iframe.src (resolved to absolute URL),
+ * falling back to iframe.name for same-origin/srcdoc iframes where href ≈ about:srcdoc.
+ */
+async function collectIframeBboxes(
+  frame: import("playwright-core").Frame,
+): Promise<
+  Map<string, { parentUrl: string; bbox: { x: number; y: number; width: number; height: number } }>
+> {
+  const parentUrl = frame === frame ? fUrl(frame) : "main";
+  const result = new Map<
+    string,
+    { parentUrl: string; bbox: { x: number; y: number; width: number; height: number } }
+  >();
+
+  try {
+    // Collect iframe bbox data from this frame's DOM
+    // Include: href (src URL), name, and bbox
+    const iframeData = (await frame.evaluate(`
+      (() => {
+        const dpr = window.devicePixelRatio || 1;
+        return Array.from(document.querySelectorAll('iframe')).map(el => {
+          try {
+            let src = el.src || '';
+            // about:srcdoc or empty src — use name attribute as fallback
+            if (!src || src === '' || src.startsWith('about:')) {
+              src = '';
+            }
+            const rect = el.getBoundingClientRect();
+            if (!rect || (rect.width === 0 && rect.height === 0)) return null;
+            return {
+              src,
+              name: el.name || '',
+              bbox: {
+                x: Math.round(rect.left * dpr),
+                y: Math.round(rect.top * dpr),
+                width: Math.round(rect.width * dpr),
+                height: Math.round(rect.height * dpr),
+              }
+            };
+          } catch { return null; }
+        }).filter(Boolean);
+      })()
+    `)) as Array<{
+      src: string;
+      name: string;
+      bbox: { x: number; y: number; width: number; height: number };
+    }> | null;
+
+    if (!iframeData) {
+      return result;
+    }
+    for (const entry of iframeData) {
+      // Match by src URL (cross-origin) or by name (same-origin/srcdoc)
+      // Child frame URL = iframe.src (resolved to absolute by browser)
+      if (entry.src) {
+        result.set(entry.src, { parentUrl, bbox: entry.bbox });
+      }
+      // Fallback: match by name for same-origin iframes (src might be about:srcdoc)
+      if (!entry.src && entry.name) {
+        // Use name as key for same-origin matching
+        result.set(entry.name, { parentUrl, bbox: entry.bbox });
+      }
+    }
+  } catch {
+    // Frame may not be ready yet (race condition) — skip non-fatally
+  }
+
+  return result;
+}
+
+/** Tag frame nodes with frameRef and apply cumulative nested offset */
 function tagFrameNodes(
   nodes: CDPSnapshotNode[],
   frameName: string,
-  iframeOffset: { x: number; y: number; width: number; height: number } | undefined,
+  offset: { x: number; y: number },
 ): MultiFrameSnapshotNode[] {
-  if (iframeOffset) {
-    return nodes.map((n) => ({
-      ...n,
-      frameRef: frameName,
-      boundingBox: n.boundingBox
-        ? {
-            x: n.boundingBox.x + iframeOffset.x,
-            y: n.boundingBox.y + iframeOffset.y,
-            width: n.boundingBox.width,
-            height: n.boundingBox.height,
-          }
-        : undefined,
-    }));
-  }
-  return nodes.map((n) => ({ ...n, frameRef: frameName }));
+  return nodes.map((n) => ({
+    ...n,
+    frameRef: frameName,
+    boundingBox: n.boundingBox
+      ? {
+          x: n.boundingBox.x + offset.x,
+          y: n.boundingBox.y + offset.y,
+          width: n.boundingBox.width,
+          height: n.boundingBox.height,
+        }
+      : undefined,
+  }));
 }
 
 function fUrl(frame: import("playwright-core").Frame): string {
