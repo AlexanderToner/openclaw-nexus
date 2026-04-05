@@ -34,6 +34,13 @@ export interface BrowserInterface {
    * Useful for verifying navigation, 404, or redirect destinations.
    */
   getUrl(): Promise<string>;
+
+  /**
+   * Get a weak-synchronous snapshot bundle containing scrubbed DOM and screenshot
+   * captured at the same moment. Falls back to individual getContent/getScreenshot
+   * calls when not implemented.
+   */
+  getVisualContext?(): Promise<VisualContext>;
 }
 
 /**
