@@ -14,8 +14,7 @@ import type {
   StabilityStatus,
   PlaywrightAdapterOptions,
 } from "../browser-interface.js";
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
-import { scrubHtml } from "../scrubber.js";
+import { scrubHtml, Scrubber } from "../scrubber.js";
 
 // Re-export config types from browser-interface so consumers only need one import
 export type {
@@ -56,6 +55,7 @@ export class PlaywrightAdapter implements BrowserInterface {
       },
       scrubMaxLength: options?.scrubMaxLength ?? 8000,
       screenshotQuality: options?.screenshotQuality ?? 60,
+      useCDPAtomic: options?.useCDPAtomic ?? false,
     };
   }
 
@@ -125,6 +125,10 @@ export class PlaywrightAdapter implements BrowserInterface {
       });
     } catch {
       // Page may have navigated away during cleanup — silent ignore
+      console.warn(
+        `[PlaywrightAdapter] Stability probe lost due to navigation. ` +
+          `DOM snapshot may reflect the post-navigation state.`,
+      );
     }
   }
 
@@ -216,21 +220,79 @@ export class PlaywrightAdapter implements BrowserInterface {
   }
 
   async getVisualContext(): Promise<VisualContext> {
+    if (this.opts.useCDPAtomic) {
+      return await this.getCDPAtomicContext();
+    }
+    // Legacy path: ensureStabilized + Promise.all
     const stability = await this.ensureStabilized();
-
     const [screenshot, rawHtml] = await Promise.all([
       this.page.screenshot({ type: "jpeg", quality: this.opts.screenshotQuality }),
       this.page.content(),
     ]);
-
     const processed = this.processIframes(rawHtml);
-    const domSnapshot = scrubHtml(processed, { maxLength: this.opts.scrubMaxLength });
-
+    const scrubber = Scrubber.fromHtml(processed, { maxLength: this.opts.scrubMaxLength });
+    const domSnapshot = scrubber.toHtml();
     return {
       screenshot,
       domSnapshot,
       capturedAt: Date.now(),
       stability,
     };
+  }
+
+  /**
+   * CDP atomic snapshot: screenshot and DOM tree captured in the same render frame.
+   * Requires useCDPAtomic: true in constructor options.
+   */
+  async getCDPAtomicContext(): Promise<VisualContext> {
+    const { captureCDPAtomic } = await import("./cdp-atomic-snapshot.js");
+
+    // Pre-check: ensure page is not still loading
+    try {
+      const readyState = await this.page.evaluate(() => document.readyState);
+      if (readyState === "loading") {
+        await this.page.waitForLoadState("domcontentloaded").catch(() => {});
+      }
+    } catch {}
+
+    try {
+      const { screenshot, nodes, capturedAt } = await captureCDPAtomic(this.page, {
+        limit: 800,
+        maxTextChars: 220,
+        quality: this.opts.screenshotQuality,
+      });
+
+      const scrubber = Scrubber.fromNodes(nodes, { maxLength: this.opts.scrubMaxLength });
+      const domSnapshot = scrubber.toHtml();
+      const scrubbedNodes = scrubber.toNodes();
+
+      return {
+        screenshot,
+        domSnapshot,
+        nodes: scrubbedNodes,
+        capturedAt,
+        stability: "stable",
+      };
+    } catch (err) {
+      const msg = String(err);
+      if (
+        msg.includes("Target") ||
+        msg.includes("Execution context was destroyed") ||
+        msg.includes("Navigation")
+      ) {
+        console.warn(
+          `[PlaywrightAdapter] CDP capture interrupted by navigation ` +
+            `at ${Date.now()}. Returning stability=unknown.`,
+        );
+        return {
+          screenshot: Buffer.alloc(0),
+          domSnapshot: "",
+          nodes: [],
+          capturedAt: Date.now(),
+          stability: "unknown",
+        };
+      }
+      throw err;
+    }
   }
 }

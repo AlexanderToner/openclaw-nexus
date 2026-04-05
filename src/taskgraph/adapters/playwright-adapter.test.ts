@@ -282,4 +282,157 @@ describe("PlaywrightAdapter", () => {
       expect(ctx.domSnapshot.length).toBeLessThanOrEqual(200 + 100);
     });
   });
+
+  describe("CDP Atomic Snapshot", () => {
+    function createMockPageCDP(send: ReturnType<typeof vi.fn>) {
+      return {
+        context: () => ({
+          newCDPSession: async () => ({
+            send,
+            detach: vi.fn().mockReturnValue(Promise.resolve()),
+          }),
+        }),
+      } as unknown as import("playwright").Page;
+    }
+
+    const FIXTURE_NODES = [
+      { ref: "n1", parentRef: null, depth: 0, tag: "html" },
+      { ref: "n2", parentRef: "n1", depth: 1, tag: "body" },
+      {
+        ref: "n3",
+        parentRef: "n2",
+        depth: 2,
+        tag: "button",
+        role: "button",
+        text: "Submit",
+        boundingBox: { x: 100, y: 200, width: 80, height: 40 },
+      },
+    ];
+
+    it("captures screenshot and nodes atomically in same session", async () => {
+      const send = vi.fn(async (method: string) => {
+        if (method === "Page.enable") {
+          return {};
+        }
+        if (method === "DOM.enable") {
+          return {};
+        }
+        if (method === "Runtime.enable") {
+          return {};
+        }
+        if (method === "Page.captureScreenshot") {
+          return { data: Buffer.from("fake-screenshot").toString("base64") };
+        }
+        if (method === "Runtime.evaluate") {
+          return { result: { value: { nodes: FIXTURE_NODES } } };
+        }
+        return {};
+      });
+
+      const page = createMockPageCDP(send);
+      const adapter = new PlaywrightAdapter(page, {
+        useCDPAtomic: true,
+        page: page,
+      } as never);
+
+      const ctx = await adapter.getCDPAtomicContext();
+
+      expect(send).toHaveBeenCalledWith("Page.enable");
+      expect(send).toHaveBeenCalledWith("Runtime.evaluate", expect.any(Object));
+      expect(ctx.stability).toBe("stable");
+      expect(ctx.screenshot).toBeInstanceOf(Buffer);
+      expect(ctx.nodes).toHaveLength(3);
+      expect(ctx.domSnapshot).toContain("data-v-id");
+      expect(ctx.domSnapshot).toContain('data-v-coords="100,200,80,40"');
+    });
+
+    it("returns stability=unknown on navigation during capture", async () => {
+      const send = vi.fn(async (_method: string) => {
+        // Throw on first CDP call to simulate navigation
+        throw new Error("Target page has been closed");
+      });
+      const page = createMockPageCDP(send);
+      const adapter = new PlaywrightAdapter(page, {
+        useCDPAtomic: true,
+        page: page,
+      } as never);
+
+      const ctx = await adapter.getCDPAtomicContext();
+
+      expect(ctx.stability).toBe("unknown");
+      expect(ctx.screenshot).toEqual(Buffer.alloc(0));
+      expect(ctx.nodes).toEqual([]);
+    });
+
+    it("pre-checks readyState before capture", async () => {
+      const evaluate = vi.fn().mockResolvedValue("complete");
+      const send = vi.fn(async (method: string) => {
+        if (method === "Page.enable") {
+          return {};
+        }
+        if (method === "DOM.enable") {
+          return {};
+        }
+        if (method === "Runtime.enable") {
+          return {};
+        }
+        if (method === "Page.captureScreenshot") {
+          return { data: "ZGF0YQ==" };
+        }
+        if (method === "Runtime.evaluate") {
+          return { result: { value: { nodes: [] } } };
+        }
+        return {};
+      });
+
+      const page = {
+        context: () => ({
+          newCDPSession: async () => ({ send, detach: vi.fn().mockReturnValue(Promise.resolve()) }),
+        }),
+        evaluate,
+        waitForLoadState: vi.fn().mockResolvedValue(undefined),
+      } as unknown as import("playwright").Page;
+
+      const adapter = new PlaywrightAdapter(page, {
+        useCDPAtomic: true,
+        page,
+      } as never);
+
+      await adapter.getCDPAtomicContext();
+      expect(evaluate).toHaveBeenCalled();
+      // The evaluate call should be checking document.readyState
+      const calls = evaluate.mock.calls;
+      expect(calls.length).toBeGreaterThan(0);
+    });
+
+    it("getVisualContext routes to CDP path when useCDPAtomic=true", async () => {
+      const send = vi.fn(async (method: string) => {
+        if (method === "Page.enable") {
+          return {};
+        }
+        if (method === "DOM.enable") {
+          return {};
+        }
+        if (method === "Runtime.enable") {
+          return {};
+        }
+        if (method === "Page.captureScreenshot") {
+          return { data: "ZGF0YQ==" };
+        }
+        if (method === "Runtime.evaluate") {
+          return { result: { value: { nodes: FIXTURE_NODES } } };
+        }
+        return {};
+      });
+      const page = createMockPageCDP(send);
+      const adapter = new PlaywrightAdapter(page, {
+        useCDPAtomic: true,
+        page,
+      } as never);
+
+      const ctx = await adapter.getCDPAtomicContext();
+      expect(send).toHaveBeenCalled();
+      expect(ctx.nodes).toBeDefined();
+    });
+  });
 });

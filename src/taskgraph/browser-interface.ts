@@ -106,6 +106,12 @@ export interface VisualContext {
   capturedAt: number;
   /** DOM stability status at capture time. */
   stability: StabilityStatus;
+  /**
+   * CDP atomic path: structured node tree with DPI-corrected boundingBox.
+   * Present when snapshot was captured via getCDPAtomicContext().
+   * Used by LLM vision prompts for precise element references.
+   */
+  nodes?: import("./scrubber.js").CDPSnapshotNode[];
 }
 
 /**
@@ -142,6 +148,8 @@ export interface PlaywrightAdapterOptions {
   scrubMaxLength?: number;
   /** JPEG quality 1-100 for screenshot(). Default: 60 */
   screenshotQuality?: number;
+  /** Enable CDP atomic snapshot path (default: false for backward compatibility) */
+  useCDPAtomic?: boolean;
 }
 
 /**
