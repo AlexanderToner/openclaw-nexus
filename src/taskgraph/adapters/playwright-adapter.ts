@@ -24,13 +24,13 @@ export type {
   IFrameOptions,
 } from "../browser-interface.js";
 
-// Skeleton helpers — used by ensureStabilized() implemented in Task 2
+// Helper functions used by ensureStabilized()
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-// Skeleton helper — used by iframe scrubbing implemented in Task 2
+// Helper function used by iframe scrubbing
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 function escapeAttr(value: string): string {
   return value.replace(/"/g, "&quot;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
@@ -40,7 +40,6 @@ export class PlaywrightAdapter implements BrowserInterface {
   private page: import("playwright").Page;
   private opts: Required<PlaywrightAdapterOptions>;
   private _lastStabilityStatus: StabilityStatus = "unknown";
-  private _activeObserver: MutationObserver | null = null;
   private frameIdCounter = 0;
 
   constructor(page: import("playwright").Page, options?: PlaywrightAdapterOptions) {
@@ -95,7 +94,7 @@ export class PlaywrightAdapter implements BrowserInterface {
     const label = title ?? this.inferIFrameLabel(src);
     this.frameIdCounter++;
     const frameId = this.frameIdCounter;
-    return `<iframe data-frame-id="${frameId}" data-frame-src="${escapeAttr(src)}" data-frame-label="${escapeAttr(label)}" role="dialog"></iframe>`;
+    return `<div data-frame-id="${frameId}" data-frame-src="${escapeAttr(src)}" data-frame-label="${escapeAttr(label)}" role="dialog"></div>`;
   }
 
   private processIframes(html: string): string {
@@ -127,7 +126,6 @@ export class PlaywrightAdapter implements BrowserInterface {
     } catch {
       // Page may have navigated away during cleanup — silent ignore
     }
-    this._activeObserver = null;
   }
 
   private async ensureStabilized(): Promise<StabilityStatus> {
@@ -163,21 +161,21 @@ export class PlaywrightAdapter implements BrowserInterface {
 
     let settled = false;
     while (!settled && Date.now() - startTime < hardTimeoutMs) {
-      await sleep(pollIntervalMs);
-      const elapsed = Date.now() - lastMutation;
-      if (elapsed >= quietThresholdMs) {
-        settled = true;
-      }
       try {
-        const probe = await this.page.evaluate(() => {
+        lastMutation = await this.page.evaluate(() => {
           const win = window as unknown as Record<string, unknown>;
           const p = win.__stabilityProbe as { lastMutation: number } | undefined;
           return p?.lastMutation ?? Date.now();
         });
-        lastMutation = probe;
       } catch {
         settled = true;
+        break;
       }
+      if (Date.now() - lastMutation >= quietThresholdMs) {
+        settled = true;
+        break;
+      }
+      await sleep(pollIntervalMs);
     }
 
     await this.cleanupStabilityProbe();
