@@ -161,6 +161,36 @@ We are currently prioritizing:
 
 Check the [GitHub Issues](https://github.com/openclaw/openclaw/issues) for "good first issue" labels!
 
+## Nexus Architecture (TaskGraph + SubAgents)
+
+Nexus is the agent execution layer of OpenClaw. Key contribution areas:
+
+### Adding a New SubAgent
+
+See [docs/plugins/subagent-registry.md](docs/plugins/subagent-registry.md) - covers agent types, registration interface, security model, and testing.
+
+### TaskGraph Configuration
+
+Nexus config lives in `src/config/zod-schema.ts` under the `taskgraph` section. See [docs/plugins/checkpoint-api.md](docs/plugins/checkpoint-api.md) for the CheckpointManager API.
+
+### Security Model
+
+SubAgents use `SecurityArbiterInterface` for access control:
+
+- ShellAgent requires a `securityArbiter` (throws if not provided)
+- FileAgent optionally uses path boundary checks
+- BrowserAgent uses Playwright's built-in sandbox
+
+### Testing
+
+- Unit tests: `src/taskgraph/*.test.ts`, `src/subagents/*.test.ts`
+- e2e tests: `test/taskgraph/*.test.ts`
+- SSRF tests: `src/infra/taskgraph-ssrf.test.ts`
+
+### Architecture Decisions
+
+See [docs/adr/](docs/adr/) for ADRs covering TaskGraph checkpoint design, SubAgent sandbox profile, and PlaywrightAdapter OOPIF handling.
+
 ## Maintainers
 
 We're selectively expanding the maintainer team.
