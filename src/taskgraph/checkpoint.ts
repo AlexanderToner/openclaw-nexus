@@ -6,6 +6,7 @@
  * Enables resumption of interrupted tasks and rollback on failure.
  */
 
+import { getTaskGraphConfig } from "./config.js";
 import { TaskGraphStore } from "./store.js";
 import type { TaskGraph, Step } from "./types.js";
 
@@ -252,8 +253,18 @@ export class CheckpointManager {
    * Get the path for checkpoint metadata file.
    */
   private getCheckpointMetaPath(taskId: string, name: string): string {
-    // This assumes DEFAULT_STORE_DIR structure
-    const home = process.env.HOME ?? "~";
-    return `${home}/.openclaw/taskgraphs/checkpoints/${taskId}/${name}.meta.json`;
+    const config = getTaskGraphConfig();
+    const baseDir = this.expandPath(config.checkpoints.storageDir);
+    return `${baseDir}/${taskId}/${name}.meta.json`;
+  }
+
+  /**
+   * Expand path with home directory.
+   */
+  private expandPath(p: string): string {
+    if (p.startsWith("~/")) {
+      return p.replace("~", process.env.HOME ?? "~");
+    }
+    return p;
   }
 }
