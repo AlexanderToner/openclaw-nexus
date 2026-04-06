@@ -16,6 +16,7 @@ import type {
   StepResult as ExecutorStepResult,
 } from "../../taskgraph/executor.js";
 import { DEFAULT_TASK_LIMITS } from "../../taskgraph/limits.js";
+import { defaultSSRFGuard } from "../../taskgraph/ssrf-guard.js";
 import { generateTaskId } from "../../taskgraph/store.js";
 import type { TaskGraph, Step, TaskLimits, Assertion } from "../../taskgraph/types.js";
 import type { StepType } from "../../taskgraph/types.js";
@@ -433,6 +434,10 @@ Return ONLY valid JSON with this structure:
     // Default to Ollama for local planning, can be overridden via config
     const endpoint = this.options.planningEndpoint ?? "http://localhost:11434";
     const model = this.options.planningModelId;
+
+    // SSRF guard: validate endpoint host before making HTTP request
+    const parsedUrl = new URL(endpoint);
+    defaultSSRFGuard.assertSafe(parsedUrl.hostname);
 
     // Use the main gateway endpoint
     const response = await Promise.race([
