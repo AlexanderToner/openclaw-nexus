@@ -19,6 +19,10 @@ Checkpoint metadata files are stored at `~/.openclaw/taskgraphs/checkpoints/{tas
 
 ## Configuration
 
+Auto-checkpointing is configured via the `autoCheckpointInterval` parameter (milliseconds) when constructing a `CheckpointManager`. There is no separate config field for auto-checkpointing; it is controlled programmatically.
+
+The config schema supports `intervalSteps` and `storageDir`:
+
 ```json
 {
   "taskgraph": {
@@ -35,11 +39,15 @@ Checkpoint metadata files are stored at `~/.openclaw/taskgraphs/checkpoints/{tas
 
 ### CheckpointManager
 
+`CheckpointManager` is an internal class (`src/taskgraph/checkpoint.ts`) and is not currently exported from the public Plugin SDK. It is used internally by the TaskGraph runtime.
+
 ```typescript
-import { CheckpointManager } from "openclaw/plugin-sdk";
+// CheckpointManager is internal - not exported from openclaw/plugin-sdk
+// Import TaskGraphStore from openclaw/plugin-sdk for store access
 import { TaskGraphStore } from "openclaw/plugin-sdk";
 
 const manager = new CheckpointManager(store, autoCheckpointInterval);
+// autoCheckpointInterval: number (milliseconds, 0 to disable)
 ```
 
 #### createCheckpoint(graph, name, reason, description?)
@@ -117,13 +125,13 @@ Returns checkpoint statistics for a task.
 
 #### maybeAutoCheckpoint(graph)
 
-Creates an automatic checkpoint if the interval has elapsed.
+Creates an automatic checkpoint if the configured `autoCheckpointInterval` (milliseconds) has elapsed since the last auto-checkpoint. Pass `0` to disable.
 
 **Parameters:**
 
 - `graph: TaskGraph` - Current TaskGraph
 
-**Returns:** `Promise<CheckpointMeta | null>` - Checkpoint metadata or null
+**Returns:** `Promise<CheckpointMeta | null>` - Checkpoint metadata or null if interval has not elapsed or auto-checkpointing is disabled
 
 #### checkpointBeforeStep(graph, step)
 
@@ -159,9 +167,10 @@ interface CheckpointMeta {
 ## Usage Example
 
 ```typescript
-import { CheckpointManager } from "openclaw/plugin-sdk";
+// CheckpointManager is internal - these examples show the API shape only
+// The class is used by the TaskGraph runtime internally
 
-// Create a checkpoint manager
+// Example: creating a checkpoint manager with 60s auto interval
 const manager = new CheckpointManager(store, 60000); // 60s auto interval
 
 // Create a checkpoint before a critical operation
