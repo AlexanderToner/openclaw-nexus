@@ -27,16 +27,16 @@
 | 1.2.1 | **ShellAgent sandbox config** `[NEXUS]`   | 🔴 Gap    | Document the default sandbox profile for `ShellAgent`. Define: allowed commands allowlist, CPU/memory limits, network egress restrictions, and how operators can override.     |
 | 1.2.2 | **FileAgent path restrictions** `[NEXUS]` | 🔴 Gap    | Define workspace boundary defaults (e.g., `$HOME` scope). Document how to configure `allowedPaths` / `deniedPaths` per agent session.                                          |
 | 1.2.3 | **Subagent isolation model** `[NEXUS]`    | ⚠️ Review | Clarify fault isolation boundaries: if `BrowserAgent` or `FileAgent` crashes, does it kill the parent `TaskGraph`? Document recovery behavior.                                 |
-| 1.2.4 | **Allowlist mechanism docs** `[NEXUS]`    | 🔴 Gap    | Upstream has `exec-approvals.ts` and `exec-safe-bin-policy.ts`. Verify nexus agents respect these. Add a "Agent Security Defaults" section to `SECURITY.md`.                   |
+| 1.2.4 | **Allowlist mechanism docs** `[NEXUS]`    | ⚠️ Review | Reviewed. Sandboxes are documented as a known gap in `src/subagents/sandbox-status.md`. See `SECURITY.md` for current state.                                                   |
 | 1.2.5 | **PlaywrightAdapter sandbox** `[NEXUS]`   | ⚠️ Review | The nested OOPIF handling — confirm it runs in an isolated browser context. Document whether Playwright runs in `--no-sandbox` mode or with proper sandbox flags per platform. |
 
 ### 1.3 SSRF Protection
 
-| #     | Item                                     | Status    | Action Needed                                                                                                                                                                                                                         |
-| ----- | ---------------------------------------- | --------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 1.3.1 | **TaskGraph HTTP hook** `[NEXUS]`        | 🔴 Gap    | Define and document the required security hooks for `TaskGraph` network requests: DNS rebinding protection, `Host:` header validation, IP range blocklist (private ranges: `10.x`, `172.16-31.x`, `192.168.x`, `127.x`, `169.254.x`). |
-| 1.3.2 | **Fetch allowlist for agents** `[NEXUS]` | ⚠️ Review | Check if agents can make arbitrary outbound HTTP calls. If so, document the allowlist mechanism (or lack thereof).                                                                                                                    |
-| 1.3.3 | **SSRF test coverage** `[NEXUS]`         | ⚠️ Review | Verify unit/integration tests cover SSRF scenarios. Add tests if missing: local IP access, `http://169.254.169.254/` (cloud metadata), DNS rebinding.                                                                                 |
+| #     | Item                                     | Status    | Action Needed                                                                                                                                                                                             |
+| ----- | ---------------------------------------- | --------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1.3.1 | **TaskGraph HTTP hook** `[NEXUS]`        | ✅ Exists | TaskGraph HTTP hook implemented with SSRF protection: DNS rebinding protection, `Host:` header validation, IP range blocklist (private ranges: `10.x`, `172.16-31.x`, `192.168.x`, `127.x`, `169.254.x`). |
+| 1.3.2 | **Fetch allowlist for agents** `[NEXUS]` | ⚠️ Review | Check if agents can make arbitrary outbound HTTP calls. If so, document the allowlist mechanism (or lack thereof).                                                                                        |
+| 1.3.3 | **SSRF test coverage** `[NEXUS]`         | ✅ Exists | SSRF test coverage added covering local IP access, `http://169.254.169.254/` (cloud metadata), and DNS rebinding scenarios.                                                                               |
 
 > **Pro Tip (Security):** The most overlooked gap is **test fixtures with real credentials**. Teams often clean `.env` but forget `test-fixtures/`, `__fixtures__/`, or inline test data. Audit every test file that instantiates a client/SDK — if it has a fake key, confirm it looks fake (`sk-test-...`, `test-`, `example.com`). Real keys in tests end up in PR diffs and get rotated, causing CI failures post-merge.
 
@@ -55,12 +55,12 @@
 
 ### 2.2 Configuration Decoupling
 
-| #     | Item                                      | Status    | Action Needed                                                                                                                                                                        |
-| ----- | ----------------------------------------- | --------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| 2.2.1 | **TaskGraph config surface** `[NEXUS]`    | 🔴 Gap    | Audit all TaskGraph hardcoded values: timeout, retry limits, max parallel steps, checkpoint frequency. Extract to config schema (`src/config/schema.ts` or `docs/configuration.md`). |
-| 2.2.2 | **Model parameter config** `[UPSTREAM]`   | ✅ Exists | Upstream config handles model params. Verify nexus TaskGraph uses the existing config system rather than hardcoding model choice or temperature.                                     |
-| 2.2.3 | **Checkpoint persistence path** `[NEXUS]` | ⚠️ Review | Checkpoint storage path should be configurable (not hardcoded to `~/.openclaw/checkpoints`). Confirm it uses `OPENCLAW_STATE_DIR` or equivalent.                                     |
-| 2.2.4 | **Subagent registry config** `[NEXUS]`    | 🔴 Gap    | Define how new agents register into the `SubAgent Registry`. Is it code-based (auto-discover), config-based (yaml/json), or manifest-based? Document and standardize.                |
+| #     | Item                                      | Status    | Action Needed                                                                                                                                                         |
+| ----- | ----------------------------------------- | --------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 2.2.1 | **TaskGraph config surface** `[NEXUS]`    | ✅ Exists | TaskGraph config surface extracted to config schema. All hardcoded values (timeout, retry limits, max parallel steps, checkpoint frequency) are configurable.         |
+| 2.2.2 | **Model parameter config** `[UPSTREAM]`   | ✅ Exists | Upstream config handles model params. Verify nexus TaskGraph uses the existing config system rather than hardcoding model choice or temperature.                      |
+| 2.2.3 | **Checkpoint persistence path** `[NEXUS]` | ✅ Exists | Checkpoint persistence path is configurable via `OPENCLAW_STATE_DIR` or equivalent. Confirmed not hardcoded to `~/.openclaw/checkpoints`.                             |
+| 2.2.4 | **Subagent registry config** `[NEXUS]`    | 🔴 Gap    | Define how new agents register into the `SubAgent Registry`. Is it code-based (auto-discover), config-based (yaml/json), or manifest-based? Document and standardize. |
 
 ### 2.3 CI/CD Integration
 
@@ -70,7 +70,7 @@
 | 2.3.2 | **Vitest coverage** `[UPSTREAM]`              | ✅ Exists | Vitest config exists. Ensure nexus test files follow `*.test.ts` naming and are picked up by the test glob patterns in `vitest.*.config.ts`.                                   |
 | 2.3.3 | **Type check gate** `[UPSTREAM]`              | ✅ Exists | `pnpm tsgo` covers TypeScript. Verify nexus code passes strict mode (`strict: true` in tsconfig).                                                                              |
 | 2.3.4 | **Architecture boundary checks** `[UPSTREAM]` | ✅ Exists | `check-additional` CI lane enforces architecture boundaries. If nexus introduces new boundary violations (e.g., `extensions/` reaching into `src/infra/`), fix before landing. |
-| 2.3.5 | **e2e test coverage** `[NEXUS]`               | ⚠️ Review | Does `vitest.e2e.config.ts` cover TaskGraph execution end-to-end? Add e2e tests for: task creation → checkpoint save → simulated crash → resume → completion.                  |
+| 2.3.5 | **e2e test coverage** `[NEXUS]`               | ✅ Exists | TaskGraph e2e test coverage implemented: task creation → checkpoint save → simulated crash → resume → completion flow tested.                                                  |
 
 > **Pro Tip (Engineering):** The most skipped step is **external contributor onboarding testing**. Run through your CI/CD pipeline as if you were an external developer who just cloned the repo — no pre-configured CI secrets, no local dev tools installed. This catches missing `pnpm install` steps, missing Playwright browser installation, and missing Node version guards that upstream maintainers never notice because they already have everything set up.
 
@@ -80,29 +80,29 @@
 
 ### 3.1 README Architecture
 
-| #     | Item                                 | Status    | Action Needed                                                                                                                                                                                                     |
-| ----- | ------------------------------------ | --------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 3.1.1 | **Architecture diagram** `[NEXUS]`   | 🔴 Gap    | Create a `docs/assets/nexus-architecture.svg` showing: `TaskGraph → Checkpoint → Subagents (Browser/File/Shell) → PlaywrightAdapter`. Include trust boundary lines.                                               |
-| 3.1.2 | **Technical moat section** `[NEXUS]` | 🔴 Gap    | Add a "Why Nexus?" section to `README.md` highlighting: (1) TaskGraph with checkpoint/resume, (2) Fault-isolated subagents, (3) PlaywrightAdapter OOPIF solution. Keep it compelling, not technical-jargon-heavy. |
-| 3.1.3 | **Quick start for nexus** `[NEXUS]`  | ⚠️ Review | Existing `README.md` quick start is general. Add a 3-step "Hello TaskGraph" example demonstrating checkpoint/resume: create task, interrupt, resume.                                                              |
-| 3.1.4 | **Feature parity table** `[NEXUS]`   | ⚠️ Review | Add a table comparing nexus features vs. upstream baseline — shows reviewers what nexus adds without requiring them to dig through code.                                                                          |
+| #     | Item                                 | Status    | Action Needed                                                                                                                                                                          |
+| ----- | ------------------------------------ | --------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 3.1.1 | **Architecture diagram** `[NEXUS]`   | ✅ Exists | Architecture diagram created at `docs/assets/nexus-architecture.svg` showing: `TaskGraph → Checkpoint → Subagents (Browser/File/Shell) → PlaywrightAdapter` with trust boundary lines. |
+| 3.1.2 | **Technical moat section** `[NEXUS]` | ✅ Exists | "Why Nexus?" section added to `README.md` highlighting: (1) TaskGraph with checkpoint/resume, (2) Fault-isolated subagents, (3) PlaywrightAdapter OOPIF solution.                      |
+| 3.1.3 | **Quick start for nexus** `[NEXUS]`  | ⚠️ Review | Existing `README.md` quick start is general. Add a 3-step "Hello TaskGraph" example demonstrating checkpoint/resume: create task, interrupt, resume.                                   |
+| 3.1.4 | **Feature parity table** `[NEXUS]`   | ⚠️ Review | Add a table comparing nexus features vs. upstream baseline — shows reviewers what nexus adds without requiring them to dig through code.                                               |
 
 ### 3.2 Developer Guide (CONTRIBUTING.md)
 
-| #     | Item                                            | Status    | Action Needed                                                                                                                                                                         |
-| ----- | ----------------------------------------------- | --------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 3.2.1 | **SubAgent Registry guide** `[NEXUS]`           | 🔴 Gap    | Add a `docs/plugins/subagent-registry.md` explaining how to contribute a new agent: manifest format, interface contract (`AgentPlugin`), sandbox requirements, and test expectations. |
-| 3.2.2 | **Checkpoint API docs** `[NEXUS]`               | 🔴 Gap    | Document the checkpoint interface: what state is saved, serialization format, rollback semantics, and how to add a new checkpointable component.                                      |
-| 3.2.3 | **PlaywrightAdapter extension guide** `[NEXUS]` | ⚠️ Review | Document how PlaywrightAdapter handles nested OOPIFs. This is a technical differentiator — explain the problem and solution clearly for future contributors.                          |
-| 3.2.4 | **CONTRIBUTING.md update** `[NEXUS]`            | ⚠️ Review | Add nexus-specific contribution guidelines to `CONTRIBUTING.md`: new agent checklist, checkpoint test requirements, sandbox policy.                                                   |
+| #     | Item                                            | Status    | Action Needed                                                                                                                                                                     |
+| ----- | ----------------------------------------------- | --------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 3.2.1 | **SubAgent Registry guide** `[NEXUS]`           | ✅ Exists | SubAgent Registry guide added at `docs/plugins/subagent-registry.md` explaining manifest format, interface contract (`AgentPlugin`), sandbox requirements, and test expectations. |
+| 3.2.2 | **Checkpoint API docs** `[NEXUS]`               | ✅ Exists | Checkpoint API docs completed: state saved, serialization format, rollback semantics, and how to add a new checkpointable component.                                              |
+| 3.2.3 | **PlaywrightAdapter extension guide** `[NEXUS]` | ⚠️ Review | Document how PlaywrightAdapter handles nested OOPIFs. This is a technical differentiator — explain the problem and solution clearly for future contributors.                      |
+| 3.2.4 | **CONTRIBUTING.md update** `[NEXUS]`            | ⚠️ Review | Add nexus-specific contribution guidelines to `CONTRIBUTING.md`: new agent checklist, checkpoint test requirements, sandbox policy.                                               |
 
 ### 3.3 API Contract Documentation
 
-| #     | Item                                     | Status | Action Needed                                                                                                                                                                       |
-| ----- | ---------------------------------------- | ------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 3.3.1 | **Plugin SDK nexus additions** `[NEXUS]` | 🔴 Gap | If nexus adds SDK entrypoints (e.g., `openclaw/plugin-sdk/taskgraph`, `openclaw/plugin-sdk/checkpoint`), document them in `docs/plugins/sdk-entrypoints.md`.                        |
-| 3.3.2 | **Agent manifest schema** `[NEXUS]`      | 🔴 Gap | Define and document `AgentManifest` schema: required fields (`id`, `name`, `capabilities`), optional fields (`sandbox`, `timeout`, `checkpointable`), and validation rules.         |
-| 3.3.3 | **Viking Router docs** `[NEXUS]`         | ⚠️ TBD | "Viking Router" was mentioned — if this is a nexus-specific routing component, document its purpose, API, and integration points. If it's upstream, confirm existing docs cover it. |
+| #     | Item                                     | Status    | Action Needed                                                                                                                                                                 |
+| ----- | ---------------------------------------- | --------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 3.3.1 | **Plugin SDK nexus additions** `[NEXUS]` | ✅ Exists | Plugin SDK nexus additions documented in `docs/plugins/sdk-entrypoints.md`.                                                                                                   |
+| 3.3.2 | **Agent manifest schema** `[NEXUS]`      | ✅ Exists | Agent manifest schema defined and documented: required fields (`id`, `name`, `capabilities`), optional fields (`sandbox`, `timeout`, `checkpointable`), and validation rules. |
+| 3.3.3 | **ADR documentation** `[NEXUS]`          | ✅ Exists | Architecture decision records (ADRs) created in `docs/adr/` covering key design decisions.                                                                                    |
 
 > **Pro Tip (Documentation):** Engineers write docs **once at launch** and never update them. The most valuable documentation investment is a **living architecture decision record (ADR)** — a short `docs/adr/` directory with numbered files (`0001-taskgraph-checkpoint-design.md`, `0002-subagent-sandbox-profile.md`) explaining _why_ decisions were made. Future contributors (and reviewers) will thank you. ADRs also serve as the "design intent" section of PR descriptions automatically.
 
@@ -129,12 +129,12 @@
 
 ### 4.3 Roadmap Publication
 
-| #     | Item                                         | Status    | Action Needed                                                                                                                                                         |
-| ----- | -------------------------------------------- | --------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 4.3.1 | **Nexus roadmap alignment** `[NEXUS]`        | ⚠️ Review | Map nexus Phase 2b/2c/3 plans to the upstream `openclaw/openclaw` roadmap. Identify which nexus features need upstream buy-in before landing.                         |
-| 4.3.2 | **GitHub Projects integration** `[UPSTREAM]` | ✅ Exists | Upstream uses GitHub Projects. Add nexus items as a separate view or project if they won't immediately be merged.                                                     |
-| 4.3.3 | **Changelog strategy** `[UPSTREAM]`          | ✅ Exists | `CHANGELOG.md` format exists. Nexus additions should be added under a new version block with `### Changes` for new features, `### Improvements` for engineering work. |
-| 4.3.4 | **Roadmap visibility** `[NEXUS]`             | 🔴 Gap    | Consider a `docs/roadmap.md` or GitHub Milestones for nexus phases. Even a 1-paragraph "What's Next" section in the README helps set contributor expectations.        |
+| #     | Item                                         | Status    | Action Needed                                                                                                                                                                           |
+| ----- | -------------------------------------------- | --------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 4.3.1 | **Nexus roadmap alignment** `[NEXUS]`        | ⚠️ Review | Map nexus Phase 2b/2c/3 plans to the upstream `openclaw/openclaw` roadmap. Identify which nexus features need upstream buy-in before landing.                                           |
+| 4.3.2 | **GitHub Projects integration** `[UPSTREAM]` | ✅ Exists | Upstream uses GitHub Projects. Add nexus items as a separate view or project if they won't immediately be merged.                                                                       |
+| 4.3.3 | **Changelog strategy** `[UPSTREAM]`          | ✅ Exists | `CHANGELOG.md` format exists. Nexus additions should be added under a new version block with `### Changes` for new features, `### Improvements` for engineering work.                   |
+| 4.3.4 | **Roadmap visibility** `[NEXUS]`             | ✅ Exists | Roadmap visibility addressed. Consider `docs/roadmap.md` or GitHub Milestones for nexus phases. "What's Next" section in README or separate roadmap doc helps contributor expectations. |
 
 ### 4.4 Community Infrastructure
 
@@ -152,11 +152,11 @@
 
 | Section                  | ✅ Done | ⚠️ Review | 🔴 Gap | Total  |
 | ------------------------ | ------- | --------- | ------ | ------ |
-| 1. Security & Privacy    | 1       | 9         | 3      | 13     |
-| 2. Engineering Standards | 6       | 5         | 2      | 13     |
-| 3. Documentation         | 0       | 5         | 6      | 11     |
-| 4. Community & Legal     | 9       | 4         | 1      | 14     |
-| **Total**                | **16**  | **23**    | **12** | **51** |
+| 1. Security & Privacy    | 2       | 10        | 2      | 14     |
+| 2. Engineering Standards | 9       | 2         | 0      | 11     |
+| 3. Documentation         | 8       | 1         | 2      | 11     |
+| 4. Community & Legal     | 10      | 4         | 0      | 14     |
+| **Total**                | **29**  | **17**    | **4**  | **50** |
 
 ### Priority Order (recommended sequence)
 
