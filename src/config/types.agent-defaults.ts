@@ -296,7 +296,7 @@ export type AgentDefaultsConfig = {
   /** Viking Router configuration for intent classification and context filtering. */
   viking?: VikingConfig;
   /** TaskGraph configuration for structured task execution. */
-  taskgraph?: TaskGraphConfig;
+  taskgraph?: TaskGraphExecutorConfig;
 };
 
 export type AgentCompactionMode = "default" | "safeguard";
@@ -392,7 +392,7 @@ export type VikingConfig = {
   confidenceThreshold?: number;
 };
 
-export type TaskGraphConfig = {
+export type TaskGraphExecutorConfig = {
   /** Enable TaskGraph structured execution. */
   enabled?: boolean;
   /** Intents that trigger TaskGraph execution (default: ["gui_auto", "browser"]). */

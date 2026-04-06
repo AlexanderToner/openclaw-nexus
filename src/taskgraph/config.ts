@@ -7,7 +7,7 @@
 import { loadConfig } from "../config/config.js";
 import type { TaskGraphSettings } from "../config/types.openclaw.js";
 
-// Re-export the type for consumers
+// Re-export TaskGraphSettings for consumers
 export type { TaskGraphSettings } from "../config/types.openclaw.js";
 
 /**

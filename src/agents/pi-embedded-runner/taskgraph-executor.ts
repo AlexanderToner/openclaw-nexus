@@ -6,7 +6,7 @@
  * Uses the main agent model to plan, then executes via SubAgents.
  */
 
-import type { TaskGraphConfig } from "../../config/types.agent-defaults.js";
+import type { TaskGraphExecutorConfig } from "../../config/types.agent-defaults.js";
 import { AssertionEngine } from "../../taskgraph/assertion-engine.js";
 import type { BrowserInterface } from "../../taskgraph/browser-interface.js";
 import { MockBrowserInterface } from "../../taskgraph/browser-interface.js";
@@ -60,7 +60,7 @@ export interface TaskGraphExecutionResult {
  */
 export interface TaskGraphExecutorOptions {
   /** TaskGraph configuration */
-  config: TaskGraphConfig;
+  config: TaskGraphExecutorConfig;
 
   /** Main model ID for planning */
   planningModelId: string;
@@ -112,7 +112,7 @@ export function createTaskGraphExecutor(
  */
 export function shouldTriggerTaskGraph(
   routeDecision: RouteDecision,
-  config: TaskGraphConfig,
+  config: TaskGraphExecutorConfig,
 ): boolean {
   if (!config.enabled) {
     return false;

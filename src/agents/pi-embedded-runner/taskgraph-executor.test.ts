@@ -6,7 +6,7 @@
  */
 
 import { describe, it, expect } from "vitest";
-import type { TaskGraphConfig } from "../../config/types.agent-defaults.js";
+import type { TaskGraphExecutorConfig } from "../../config/types.agent-defaults.js";
 import { MockBrowserInterface } from "../../taskgraph/browser-interface.js";
 import type { Step } from "../../taskgraph/types.js";
 import { VisionVerificationHook } from "../../taskgraph/vision-hook.js";
@@ -19,7 +19,7 @@ import {
 
 describe("TaskGraph Executor", () => {
   describe("shouldTriggerTaskGraph", () => {
-    const defaultConfig: TaskGraphConfig = {
+    const defaultConfig: TaskGraphExecutorConfig = {
       enabled: true,
       triggerIntents: ["gui_auto", "browser"],
     };
@@ -34,7 +34,7 @@ describe("TaskGraph Executor", () => {
         confidence: 0.9,
       };
 
-      const config: TaskGraphConfig = { enabled: false };
+      const config: TaskGraphExecutorConfig = { enabled: false };
       expect(shouldTriggerTaskGraph(decision, config)).toBe(false);
     });
 
@@ -100,7 +100,7 @@ describe("TaskGraph Executor", () => {
         confidence: 0.9,
       };
 
-      const config: TaskGraphConfig = {
+      const config: TaskGraphExecutorConfig = {
         enabled: true,
         triggerIntents: ["gui_auto", "browser", "file_ops"],
       };
@@ -120,7 +120,7 @@ describe("TaskGraph Executor", () => {
         confidence: 0.9,
       };
 
-      const config: TaskGraphConfig = {
+      const config: TaskGraphExecutorConfig = {
         enabled: true,
         triggerIntents: ["gui_auto", "browser"],
       };
@@ -148,7 +148,7 @@ describe("TaskGraph Executor", () => {
         confidence: 0.9,
       };
 
-      const config: TaskGraphConfig = {
+      const config: TaskGraphExecutorConfig = {
         enabled: true,
         triggerIntents: ["browser"],
         limits: { maxSteps: 2, maxTokens: 1000, maxReplans: 1 },
