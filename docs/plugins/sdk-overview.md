@@ -244,3 +244,4 @@ my-plugin/
 - [Testing](/plugins/sdk-testing) — test utilities and lint rules
 - [SDK Migration](/plugins/sdk-migration) — migrating from deprecated surfaces
 - [Plugin Internals](/plugins/architecture) — deep architecture and capability model
+- [SubAgent Registry](/plugins/subagent-registry) — register and extend SubAgents for TaskGraph execution
