@@ -166,6 +166,31 @@ const PluginEntrySchema = z
   })
   .strict();
 
+const TaskGraphLimitsSchema = z
+  .object({
+    maxSteps: z.number().int().positive().default(50),
+    maxRetries: z.number().int().min(0).default(3),
+    maxReplans: z.number().int().min(0).default(2),
+    stepTimeoutMs: z.number().int().positive().default(120_000),
+  })
+  .strict();
+
+const TaskGraphCheckpointsSchema = z
+  .object({
+    enabled: z.boolean().default(true),
+    intervalSteps: z.number().int().positive().default(5),
+    storageDir: z.string().default("~/.openclaw/taskgraphs/checkpoints"),
+  })
+  .strict();
+
+const TaskGraphSchema = z
+  .object({
+    enabled: z.boolean().default(true),
+    checkpoints: TaskGraphCheckpointsSchema.optional(),
+    limits: TaskGraphLimitsSchema.optional(),
+  })
+  .strict();
+
 const TalkProviderEntrySchema = z
   .object({
     voiceId: z.string().optional(),
@@ -944,6 +969,7 @@ export const OpenClawSchema = z
       })
       .strict()
       .optional(),
+    taskgraph: TaskGraphSchema.optional(),
   })
   .strict()
   .superRefine((cfg, ctx) => {

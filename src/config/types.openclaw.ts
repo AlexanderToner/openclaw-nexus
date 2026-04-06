@@ -122,6 +122,26 @@ export type OpenClawConfig = {
   gateway?: GatewayConfig;
   memory?: MemoryConfig;
   mcp?: McpConfig;
+  taskgraph?: TaskGraphSettings;
+};
+
+export type TaskGraphSettings = {
+  enabled?: boolean;
+  checkpoints?: TaskGraphCheckpointsConfig;
+  limits?: TaskGraphLimitsConfig;
+};
+
+export type TaskGraphCheckpointsConfig = {
+  enabled?: boolean;
+  intervalSteps?: number;
+  storageDir?: string;
+};
+
+export type TaskGraphLimitsConfig = {
+  maxSteps?: number;
+  maxRetries?: number;
+  maxReplans?: number;
+  stepTimeoutMs?: number;
 };
 
 export type ConfigValidationIssue = {
