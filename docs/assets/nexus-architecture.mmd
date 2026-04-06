@@ -1,0 +1,41 @@
+graph TB
+    subgraph "Operator Interface"
+        CLI["openclaw agent --message '...'"]
+        WEB["Web UI"]
+    end
+
+    subgraph "OpenClaw Gateway"
+        TGE["TaskGraphExecutor"]
+        CP["CheckpointManager"]
+        REG["SubAgentRegistry"]
+    end
+
+    subgraph "SubAgents (fault-isolated)"
+        BA["BrowserAgent<br/>(PlaywrightAdapter)"]
+        FA["FileAgent"]
+        SA["ShellAgent"]
+        GA["GUIAgent"]
+    end
+
+    subgraph "PlaywrightAdapter"
+        CDP["CDP Atomic Snapshot"]
+        LEG["Legacy MutationObserver"]
+        OOF["Nested OOPIF Handling"]
+    end
+
+    CLI --> TGE
+    WEB --> TGE
+    TGE --> CP
+    TGE --> REG
+    REG --> BA
+    REG --> FA
+    REG --> SA
+    REG --> GA
+    BA --> CDP
+    BA --> LEG
+    BA --> OOF
+
+    style TGE fill:#e1f5fe
+    style CP fill:#fff3e0
+    style REG fill:#e8f5e9
+    style BA fill:#fce4ec

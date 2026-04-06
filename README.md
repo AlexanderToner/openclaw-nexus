@@ -80,6 +80,26 @@ openclaw agent --message "Ship checklist" --thinking high
 
 Upgrading? [Updating guide](https://docs.openclaw.ai/install/updating) (and run `openclaw doctor`).
 
+## Why Nexus?
+
+Nexus is the agent execution layer that makes OpenClaw reliable for real work:
+
+### TaskGraph with Checkpoint/Resume
+
+Complex tasks are modeled as graphs of steps. If interrupted (crash, restart, or manual stop), the CheckpointManager persists state after every N steps. When resumed, execution continues from the last checkpoint — no wasted API calls, no lost progress.
+
+### Fault-Isolated SubAgents
+
+Each step type (file, shell, browser, GUI) runs in a dedicated SubAgent with its own sandbox profile. If a `ShellAgent` command hangs, the `BrowserAgent` keeps running. Faults are contained to the step that caused them.
+
+### Browser Agent with Nested OOPIF Support
+
+The `PlaywrightAdapter` handles Out-of-Process Inline Frames (OOPIFs) — a notoriously tricky problem where cross-origin iframes break standard DOM observation. Nexus uses a dual-path strategy: CDP atomic snapshots when available, MutationObserver fallback for compatibility.
+
+### Configurable Limits & Sandboxing
+
+TaskGraph enforces configurable limits (max steps, timeouts, retries) via the config schema. SubAgents respect configurable security policies — no separate security model.
+
 ## Development channels
 
 - **stable**: tagged releases (`vYYYY.M.D` or `vYYYY.M.D-<patch>`), npm dist-tag `latest`.
