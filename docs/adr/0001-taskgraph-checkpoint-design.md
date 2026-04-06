@@ -13,7 +13,7 @@ Long-running TaskGraph tasks need to survive interruptions (operator stop, crash
 
 ## Decision
 
-Use **interval checkpointing** with a configurable interval (default: every 5 steps, or time-based via `autoCheckpointInterval`). Checkpoints are stored as JSON files under `~/.openclaw/taskgraphs/checkpoints/{taskId}/`.
+Use **interval checkpointing** with a time-based configurable interval (`autoCheckpointInterval`, milliseconds). Checkpoints can also be created manually via `createCheckpoint`. Checkpoints are stored as JSON files under `~/.openclaw/taskgraphs/checkpoints/{taskId}/`.
 
 The CheckpointManager provides `createCheckpoint`, `restoreCheckpoint`, `listCheckpoints`, `deleteCheckpoint`, `findLatestCheckpoint`, and `maybeAutoCheckpoint` methods.
 
