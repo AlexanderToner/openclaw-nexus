@@ -3,6 +3,8 @@ title: "SubAgent Registry"
 summary: "Register and extend SubAgents for TaskGraph step execution"
 ---
 
+> **Note:** The SubAgent registry is internal to OpenClaw core and not yet a stable public plugin SDK entrypoint. Import paths shown here are for contributors to `openclaw/openclaw` itself. Plugin authors should open an issue to request a public API for registering SubAgents.
+
 # SubAgent Registry
 
 SubAgents are sandboxed execution units that handle specific step types in a TaskGraph. Each SubAgent is responsible for a particular domain of operations, such as shell commands, file system access, or browser automation.
@@ -21,7 +23,7 @@ SubAgents are sandboxed execution units that handle specific step types in a Tas
 ### SubAgent
 
 ```typescript
-import type { SubAgent, SubAgentContext, SubAgentResult } from "openclaw/plugin-sdk/subagent-types";
+import type { SubAgent, SubAgentContext, SubAgentResult } from "../../src/subagents/types.js";
 
 interface SubAgent {
   readonly type: SubAgentType;
@@ -87,7 +89,7 @@ interface SecurityCheckResult {
 ### 1. Define your agent
 
 ```typescript
-import type { Step } from "../taskgraph/types.js";
+import type { Step } from "../../src/taskgraph/types.js";
 import type { SubAgent, SubAgentContext, SubAgentResult } from "./types.js";
 
 export class YourAgent implements SubAgent {
@@ -136,7 +138,7 @@ export class YourAgent implements SubAgent {
 ### 2. Register it
 
 ```typescript
-import { globalRegistry } from "openclaw/subagents/registry.js";
+import { globalRegistry } from "../../src/subagents/registry.js";
 
 globalRegistry.register(new YourAgent(), {
   priority: 100,
@@ -150,7 +152,7 @@ globalRegistry.register(new YourAgent(), {
 ### 3. Using the registry
 
 ```typescript
-import { globalRegistry } from "openclaw/subagents/registry.js";
+import { globalRegistry } from "../../src/subagents/registry.js";
 
 // Find the best agent for a step
 const agent = globalRegistry.getAgent(step);
@@ -201,7 +203,7 @@ Unit test your agent with mocked context:
 
 ```typescript
 import { describe, it, expect, vi } from "vitest";
-import { ShellAgent } from "../shell-agent.js";
+import { ShellAgent } from "../../src/subagents/shell-agent.js";
 
 describe("ShellAgent", () => {
   it("executes allowed commands", async () => {
